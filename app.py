@@ -24,7 +24,7 @@ if "my_budget" not in st.session_state:
 if "my_income_categories" not in st.session_state:
     st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
 
-# 🔥 核心數據回填：導入真實流水帳明細，讓全系統圖表與進度條 100% 聯動對齊
+# 核心數據回填：導入真實流水帳明細
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
         # --- 收入明細 ---
@@ -32,7 +32,7 @@ if "my_logs" not in st.session_state:
         {"日期": "2026/05/10", "類型": "收入 📥", "分類": "投資所得", "子分類": "股票派息", "項目": "港股收息", "金額": 3500.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/15", "類型": "收入 📥", "分類": "被動收入", "子分類": "網店/租金", "項目": "副業進帳", "金額": 1500.0, "帳戶/備註": "現金帳戶 🟢"},
         
-        # --- 支出明細 (對應真實 Budget Tracker 數據) ---
+        # --- 支出明細 ---
         {"日期": "2026/05/01", "類型": "支出 💸", "分類": "租金", "子分類": "住屋", "項目": "每月固定租金支出", "金額": 7700.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/05", "類型": "支出 💸", "分類": "交通", "子分類": "特別專款", "項目": "特別交通專款", "金額": 1000.0, "帳戶/備註": "現金帳戶 🟢"},
         {"日期": "2026/05/08", "類型": "支出 💸", "分類": "化妝品", "子分類": "彩妝", "項目": "專櫃美妝粉餅", "金額": 880.0, "帳戶/備註": "信用卡欠款 🔴"},
@@ -65,13 +65,13 @@ actual_income_map = {cat: 0.0 for cat in st.session_state.my_income_categories}
 if not df_current_logs.empty:
     df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
     
-    # 1. 動態動態統計實際收入
+    # 1. 動態統計實際收入
     df_income_only = df_current_logs[df_current_logs["類型"] == "收入 📥"]
     total_actual_income = float(df_income_only["金額"].sum())
     for cat in actual_income_map.keys():
         actual_income_map[cat] = float(df_income_only[df_income_only["分類"] == cat]["金額"].sum())
         
-    # 2. 動態動態統計實際支出
+    # 2. 動態統計實際支出
     df_expenses_only = df_current_logs[df_current_logs["類型"] == "支出 💸"]
     total_actual_expense = float(df_expenses_only["金額"].sum())
     for cat in actual_spent_map.keys():
@@ -83,10 +83,10 @@ savings_rate = (expected_savings / total_actual_income * 100) if total_actual_in
 
 # ==================== 4. 網頁 UI 視覺介面 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
-st.caption("🚀 雲端收支全功能分享版 — 內建「動態數據聯動核心」與「自動流向清洗引擎」")
+st.caption("🚀 雲端收支全功能分享版 — 內建「華爾街標準會計對齊引擎」與「全動態閉環畫布」")
 st.markdown("---")
 
-# 頂部核心財務看板（這裏的數字現在跟下方完全同步！）
+# 頂部核心財務看板
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 m_col1.metric("💰 本月總收入 (Income)", f"${total_actual_income:,.2f}")
 m_col2.metric("💸 本月總支出 (Actual)", f"${total_actual_expense:,.2f}")
@@ -169,14 +169,58 @@ if page_choice == "📊 財務總覽 & 預算監控":
             total_b_sum += b_amount
             total_a_sum += a_amount
             
+            # 🔥 極致微調：對所有數值進行精確到 .1f 嘅金融級千分位字串化，確保連 $0.0 都完美對齊
             budget_rows.append({
-                "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
-                "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
+                "分類 (Category)": cat, 
+                "預算 (Budget)": f"${b_amount:,.1f}", 
+                "已使用 (Actual)": f"${a_amount:,.1f}",
+                "剩餘 (Remaining)": f"${remaining:,.1f}", 
+                "使用率": f"{use_rate:.1f}%", 
+                "狀態": status_icon
             })
             
-        # 增加一列總計，實現完美的財務對齊閉環
+        # 總計列同步進化
         total_remain = total_b_sum - total_a_sum
         total_rate = (total_a_sum / total_b_sum) * 100 if total_b_sum > 0 else 0.0
         budget_rows.append({
-            "分類 (Category)": "📊 總計 (Total)", "預算 (Budget)": f"${total_b_sum:,.1f}", "已使用 (Actual)": f"${total_a_sum:,.1f}",
-            "剩餘 (Remaining)": f"${total_remain:,.1f}", "使用率": f"{total
+            "分類 (Category)": "📊 總計 (Total)", 
+            "預算 (Budget)": f"${total_b_sum:,.1f}", 
+            "已使用 (Actual)": f"${total_a_sum:,.1f}",
+            "剩餘 (Remaining)": f"${total_remain:,.1f}", 
+            "使用率": f"{total_rate:.1f}%", 
+            "狀態": "🔥 全面掌控"
+        })
+        
+        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True, height=335)
+
+    st.markdown("---")
+    st.subheader("📋 您的歷史收支明細報表")
+    if st.session_state.my_logs:
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
+        csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
+
+# ------ 頁面 2: 每日單筆記帳 ------
+elif page_choice == "💸 每日單筆記帳 (收/支)":
+    st.subheader("📥 填寫日常單筆收支")
+    all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
+    in_type = st.selectbox("1. 選擇交易類型", ["支出 💸", "收入 📥"])
+    
+    with st.form("share_single_form_v2", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            in_date = st.date_input("日期", datetime.now())
+            in_cat = st.selectbox("選擇收入分類", st.session_state.my_income_categories) if in_type == "收入 📥" else st.selectbox("選擇支出分類", list(st.session_state.my_budget.keys()))
+            in_subcat = st.text_input("子分類（如：股票派息、副業、外食）")
+        with c2:
+            in_title = st.text_input("項目名稱")
+            in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
+            in_acc = st.selectbox("動用帳戶/帳戶備註", all_accs)
+            
+        submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
+        if submit_btn and in_amount > 0:
+            if in_type == "收入 📥":
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
+            else:
+                if in_acc in st.session_state.my_assets: st
