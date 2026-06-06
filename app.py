@@ -42,3 +42,9 @@ my_entry = {
     "項目": "專櫃美妝粉餅", 
     "金額": 880.0
 }
+# 錯誤修正範例
+if fig_inc_data is not None and not fig_inc_data.empty:
+    fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4)
+    st.plotly_chart(fig_inc)
+else:
+    st.write("目前無資料顯示")
