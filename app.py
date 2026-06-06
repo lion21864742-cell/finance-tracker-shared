@@ -12,12 +12,12 @@ if "my_assets" not in st.session_state:
 if "my_liabilities" not in st.session_state:
     st.session_state.my_liabilities = {"信用卡欠款 🔴": 2000.0}
     
-# 這裡就是你可以隨時在網頁上修改的 Budget 初始值
+# 預算初始架構
 if "my_budget" not in st.session_state:
     st.session_state.my_budget = {
-        "飲食": 1000.0, "租金": 1000, "交通": 1000.0, 
-        "家用品": 1000.0, "娛樂": 700.0, "園藝": 1000.0, "電費": 1000.0,
-        "寵物用品": 1000.0, "其他": 1000.0
+        "飲食": 1000.0, "租金": 1000.0, "交通": 1000.0, 
+        "家用品": 1000.0, "娛樂": 1000.0, "園藝": 1000.0, "電費": 1000.0,
+        "寵物用品": 1000.0, "其他": 500.0
     }
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
@@ -172,36 +172,47 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
         except Exception as e:
             st.error(f"讀取失敗：{e}")
 
-# ------ 頁面 4: 自訂您的資產/預算初始值（🔥 這裡加入了自訂 Budget 功能） ------
+# ------ 頁面 4: 自訂您的資產/預算初始值 ------
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.subheader("⚙️ 個人化財務設定後台")
-    st.markdown("您可以在這裡直接修改銀行餘額，也可以**自由調整各分類的每月的預算上限**。")
+    st.markdown("您可以在這裡直接修改銀行餘額，也可以自由調整各分類的每月的預算上限。")
     
-    if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary"):
-        st.session_state.my_logs = []
-        st.rerun()
+    # 快捷功能區
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary", use_container_width=True):
+            st.session_state.my_logs = []
+            st.rerun()
+    with col_btn2:
+        if st.button("✨ 點我快速一鍵套用系統預設預算值", type="secondary", use_container_width=True):
+            st.session_state.my_budget = {
+                "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
+                "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
+                "貓用品": 500.0, "其他": 500.0
+            }
+            st.toast("✅ 已成功載入經典預算組合！")
+            st.rerun()
         
     st.markdown("---")
     
-    # 用欄位切分：左邊改錢，右邊改 Budget
     col_s1, col_s2 = st.columns(2)
     
     with col_s1:
         st.write("### 🟢 設定您的資產初始餘額")
+        # 💡 通過加上 asset_ 前綴，徹底解決 key 衝突問題
         for k, v in list(st.session_state.my_assets.items()):
-            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_{k}")
+            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_input_key_{k}")
         
         st.write("### 🔴 設定您的負債初始欠款")
+        # 💡 通過加上 lia_ 前綴，解決 key 衝突問題
         for k, v in list(st.session_state.my_liabilities.items()):
-            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_{k}")
+            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_input_key_{k}")
 
-    # 🔥 右側：全新加入的每月預算在線修改面板
     with col_s2:
         st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
         st.caption("更改下方數字後，前台的進度條跟超支警告燈號會即時同步計算！")
         
+        # 💡 加上 budget_ 前綴，確保安全不撞 key
         for cat, b_val in list(st.session_state.my_budget.items()):
-            # 建立每一個分類的數字輸入框
-            new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_{cat}")
-            # 即時寫回系統記憶體
+            new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_key_{cat}")
             st.session_state.my_budget[cat] = new_budget
