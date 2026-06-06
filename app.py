@@ -119,13 +119,6 @@ if page_choice == "📊 財務總覽 & 預算監控":
             })
         st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True)
 
-    st.markdown("---")
-    st.subheader("📋 您的歷史收支明細報表")
-    if st.session_state.my_logs:
-        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
-        csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
-
 # ------ 頁面 2: 每日單筆記帳 (收/支雙引擎) ------
 elif page_choice == "💸 每日單筆記帳 (收/支)":
     st.subheader("📥 填寫日常單筆收支")
@@ -254,4 +247,11 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         st.write("### 🎯 調整每月預算上限")
         for cat, b_val in st.session_state.my_budget.items():
             st.session_state.my_budget[cat] = st.number_input(f"{cat} 預算 ($)", value=float(b_val), step=100.0)
+            # ------ 頁面 5: 自訂您的資產/預算初始值 ------
+ st.markdown("---")
+    st.subheader("📋 您的歷史收支明細報表")
+    if st.session_state.my_logs:
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
+        csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
 
