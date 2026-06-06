@@ -237,16 +237,20 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
             st.session_state.my_budget[cat] = new_budget
 st.markdown("---")
     st.write("### ➕ 自訂您的收入項目分類")
-    # 顯示目前有啲咩分類
-    st.caption("目前系統中的收入分類： " + " 、 ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
     
-    # 輸入框
-    new_cat = st.text_input("輸入你想新增的收入分類名稱（例如：利息收入）")
+    # 顯示目前已有的分類，方便確認
+    st.caption("目前系統中的收入分類： " + ", ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
+    
+    # 輸入新分類
+    new_cat = st.text_input("輸入你想新增的收入分類名稱（例如：股息收入）")
     
     if st.button("確認新增此分類 🚀"):
+        # 防呆機制：檢查是否為空字串，且是否已存在
         if new_cat.strip() and new_cat.strip() not in st.session_state.my_income_categories:
             st.session_state.my_income_categories.append(new_cat.strip())
             st.success(f"✅ 已成功新增分類：{new_cat.strip()}")
-            st.rerun() # 重新載入令選單即時更新
+            st.rerun() # 重新執行頁面，讓記帳頁面的下拉選單即時更新
         elif new_cat.strip() in st.session_state.my_income_categories:
             st.warning("⚠️ 這個分類已經存在了！")
+        else:
+            st.error("❌ 請輸入有效的分類名稱。")
