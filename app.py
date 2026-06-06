@@ -66,4 +66,145 @@ savings_rate = (expected_savings / total_actual_income * 100) if total_actual_in
 
 # ==================== 4. 網頁 UI 視覺介面 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
-st.caption("🚀 雲端收支全功能分享版 — 內建「雙欄黃金比例看板
+st.caption("🚀 雲端收支全功能分享版 — 內建「雙欄黃金比例看板」與「全智能對齊引擎」")
+st.markdown("---")
+
+# 頂部核心財務看板
+m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+m_col1.metric("💰 本月總收入 (Income)", f"${total_actual_income:,.2f}")
+m_col2.metric("💸 本月總支出 (Actual)", f"${total_actual_expense:,.2f}")
+m_col3.metric("📈 預計儲蓄 (Savings)", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
+m_col4.metric("👑 當前淨身家 (Net Worth)", f"${net_worth:,.2f}")
+st.markdown("---")
+
+# 側邊欄：導覽選單
+page_choice = st.sidebar.radio("切換功能頁面", [
+    "📊 財務總覽 & 預算監控", 
+    "💸 每日單筆記帳 (收/支)", 
+    "📤 批量上載 Excel/CSV 檔案",
+    "⚙️ 自訂您的資產/預算初始值"
+])
+st.sidebar.markdown("---")
+st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，數據互不干涉！")
+
+# ------ 頁面 1: 財務總覽 & 預算監控 ------
+if page_choice == "📊 財務總覽 & 預算監控":
+    main_left_col, main_right_col = st.columns([1.4, 1.0])
+    
+    with main_left_col:
+        st.subheader("📊 本月收支結構圖表分析")
+        pie_col1, pie_col2 = st.columns(2)
+        
+        with pie_col1:
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💰 收入來源比例</p>", unsafe_allow_html=True)
+            fig_inc_data = pd.DataFrame(list(actual_income_map.items()), columns=["收入分類", "金額"])
+            fig_inc_data = fig_inc_data[fig_inc_data["金額"] > 0]
+            if not fig_inc_data.empty:
+                fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Solar)
+                
+                fig_inc.update_traces(
+                    textposition='inside',
+                    textinfo='label+percent',
+                    texttemplate='%{label}<br>%{percent:.1%}',
+                    insidetextorientation='horizontal',
+                    hovertemplate='<b>%{label}</b><br>實際金額: $%{value:,.2f}<br>佔比: %{percent:.1%}<extra></extra>'
+                )
+                # 🔥 大師級優化：設定 uniformtext 強制文字大小不縮小，並優化外邊距
+                fig_inc.update_layout(
+                    template="plotly_dark", 
+                    margin=dict(l=15, r=15, t=40, b=15), 
+                    height=280, 
+                    showlegend=False,
+                    uniformtext=dict(mode='hide', minsize=11)
+                )
+                st.plotly_chart(fig_inc, use_container_width=True)
+            else:
+                st.info("💡 尚無實際收入數據。")
+                
+        with pie_col2:
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💸 開支分類比例</p>", unsafe_allow_html=True)
+            if total_actual_expense > 0:
+                fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
+                fig_data = fig_data[fig_data["實際支出"] > 0]
+                fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
+                
+                fig.update_traces(
+                    textposition='inside',
+                    textinfo='label+percent',
+                    texttemplate='%{label}<br>%{percent:.1%}',
+                    insidetextorientation='horizontal',
+                    hovertemplate='<b>%{label}</b><br>實際金額: $%{value:,.2f}<br>佔比: %{percent:.1%}<extra></extra>'
+                )
+                # 🔥 大師級優化：支出圖表同步配置 uniformtext，保證左右圖表字體美學一致
+                fig.update_layout(
+                    template="plotly_dark", 
+                    margin=dict(l=15, r=15, t=40, b=15), 
+                    height=280, 
+                    showlegend=False,
+                    uniformtext=dict(mode='hide', minsize=11)
+                )
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("💡 尚無支出數據。")
+            
+    with main_right_col:
+        st.subheader("🎯 Budget Tracker 預算進度條")
+        budget_rows = []
+        for cat, b_amount in st.session_state.my_budget.items():
+            a_amount = actual_spent_map.get(cat, 0.0)
+            remaining = b_amount - a_amount
+            use_rate = (a_amount / b_amount) * 100 if b_amount > 0 else 0.0
+            status_icon = "🔴 已超支" if use_rate >= 100 else ("🟡 預警" if use_rate >= 80 else "🟢 正常")
+            budget_rows.append({
+                "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
+                "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
+            })
+        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True, height=315)
+
+    st.markdown("---")
+    st.subheader("📋 您的歷史收支明細報表")
+    if st.session_state.my_logs:
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
+        csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
+
+# ------ 頁面 2: 每日單筆記帳 ------
+elif page_choice == "💸 每日單筆記帳 (收/支)":
+    st.subheader("📥 填寫日常單筆收支")
+    all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
+    in_type = st.selectbox("1. 選擇交易類型", ["支出 💸", "收入 📥"])
+    
+    with st.form("share_single_form_v2", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
+            in_date = st.date_input("日期", datetime.now())
+            in_cat = st.selectbox("選擇收入分類", st.session_state.my_income_categories) if in_type == "收入 📥" else st.selectbox("選擇支出分類", list(st.session_state.my_budget.keys()))
+            in_subcat = st.text_input("子分類（如：股票派息、副業、外食）")
+        with c2:
+            in_title = st.text_input("項目名稱")
+            in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
+            in_acc = st.selectbox("動用帳戶/帳戶備註", all_accs)
+            
+        submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
+        if submit_btn and in_amount > 0:
+            if in_type == "收入 📥":
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
+            else:
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] -= in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
+            
+            st.session_state.my_logs.append({
+                "日期": in_date.strftime("%Y/%m/%d"), "類型": in_type, "分類": in_cat, "子分類": in_subcat, "項目": in_title, "金額": in_amount, "帳戶/備註": in_acc
+            })
+            st.success(f"✅ 成功記入一筆 {in_type}：{in_title} ${in_amount}")
+            st.rerun()
+
+# ------ 頁面 3: 批量上載 ------
+elif page_choice == "📤 批量上載 Excel/CSV 檔案":
+    st.subheader("📤 批量匯入您現現有的記帳表格")
+    upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
+    if upload_file is not None:
+        try:
+            df_imported = pd.read_csv(upload_file, encoding='utf-8-sig') if upload_file.name.endswith('.csv') else pd.read_excel(upload_file)
+            if "日期 (Date)" in df_imported.columns: df_imported = df_imported.rename(columns
