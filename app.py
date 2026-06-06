@@ -15,9 +15,9 @@ if "my_liabilities" not in st.session_state:
 # 這裡就是你可以隨時在網頁上修改的 Budget 初始值
 if "my_budget" not in st.session_state:
     st.session_state.my_budget = {
-        "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
-        "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
-        "貓用品": 500.0, "其他": 500.0
+        "飲食": 1000.0, "租金": 1000, "交通": 1000.0, 
+        "家用品": 1000.0, "娛樂": 700.0, "園藝": 1000.0, "電費": 1000.0,
+        "寵物用品": 1000.0, "其他": 1000.0
     }
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
