@@ -235,7 +235,7 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         for cat, b_val in list(st.session_state.my_budget.items()):
             new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_key_{cat}")
             st.session_state.my_budget[cat] = new_budget
-st.markdown("---")
+    st.markdown("---")
     st.write("### ➕ 自訂您的收入項目分類")
     
     # 顯示目前已有的分類，方便確認
