@@ -24,7 +24,7 @@ if "my_budget" not in st.session_state:
 if "my_income_categories" not in st.session_state:
     st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
 
-# 終極細節修正：修正錯別字，還原最真實的 Excel 逐筆流水帳
+# 核心數據回填：導入真實流水帳明細
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
         # --- 收入明細 ---
@@ -35,7 +35,7 @@ if "my_logs" not in st.session_state:
         # --- 支出明細 ---
         {"日期": "2026/05/01", "類型": "支出 💸", "分類": "租金", "子分類": "住屋", "項目": "每月固定租金支出", "金額": 7700.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/05", "類型": "支出 💸", "分類": "交通", "子分類": "特別專款", "項目": "特別交通專款", "金額": 1000.0, "帳戶/備註": "現金帳戶 🟢"},
-        {"日期": "2026/05/08", "類型": "支出 💸", "分類": "化妝品", "子分類": "彩妝", "項目": "專櫃美妝粉餅", "金額": 880.0, "帳戶/備註": "信用卡欠款 🔴"},
+        {"日期": "2026/05/08", "類型": "支出 💸", "分類": "化妝品", "子妝", "項目": "專櫃美妝粉餅", "金額": 880.0, "帳戶/備註": "信用卡欠款 🔴"},
         {"日期": "2026/05/12", "類型": "支出 💸", "分類": "電費", "子分類": "公用事業", "項目": "電費（2個月一次）", "金額": 864.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/14", "類型": "支出 💸", "分類": "娛樂", "子分類": "玩具", "項目": "潮流公仔 Toy", "金額": 517.8, "帳戶/備註": "現金帳戶 🟢"},
         {"日期": "2026/05/16", "類型": "支出 💸", "分類": "其他", "子分類": "服飾", "項目": "舒適睡衣", "金額": 188.0, "帳戶/備註": "現金帳戶 🟢"},
@@ -104,7 +104,8 @@ page_choice = st.sidebar.radio("切換功能頁面", [
     "⚙️ 自訂您的資產/預算初始值"
 ])
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **提示：** 本系統為 independent 安全空間，個人流水帳即時渲染更新！")
+# 🔥 語言完美對齊：修正「independent」為中文「獨立」
+st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，個人流水帳即時渲染更新！")
 
 # ------ 頁面 1: 財務總覽 & 預算監控 ------
 if page_choice == "📊 財務總覽 & 預算監控":
@@ -201,20 +202,20 @@ if page_choice == "📊 財務總覽 & 預算監控":
         csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
 
-# ------ 頁面 2: 每日單筆記帳 (🚀 UI/UX 動態標籤完美修復版) ------
+# ------ 頁面 2: 每日單筆記帳 ------
 elif page_choice == "💸 每日單筆記帳 (收/支)":
     st.subheader("📥 填寫日常單筆收支")
     all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
     in_type = st.selectbox("1. 選擇交易類型", ["支出 💸", "收入 📥"])
     
-    # 🔥 核心體驗修復：根據選擇的類型，動態生成完全匹配的選單標題
+    # 核心體驗修復：根據選擇的類型，動態生成完全匹配的選單標題
     dynamic_label = "選擇收入分類 (Category)" if in_type == "收入 📥" else "選擇支出分類 (Category)"
     
     with st.form("share_single_form_v2", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
             in_date = st.date_input("日期", datetime.now())
-            # ✨ 使用 dynamic_label 完美對齊表單直覺
+            # 使用 dynamic_label 完美對齊表單直覺
             in_cat = st.selectbox(dynamic_label, st.session_state.my_income_categories) if in_type == "收入 📥" else st.selectbox(dynamic_label, list(st.session_state.my_budget.keys()))
             in_subcat = st.text_input("子分類（如：股票派息、副業、外食）")
         with c2:
