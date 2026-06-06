@@ -66,7 +66,7 @@ savings_rate = (expected_savings / total_actual_income * 100) if total_actual_in
 
 # ==================== 4. 網頁 UI 視覺介面 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
-st.caption("🚀 雲端收支全功能分享版 — 內建「動態自訂收入源」與「Excel 智能對齊升級引擎」")
+st.caption("🚀 雲端收支全功能分享版 — 內建「雙欄黃金比例看板」與「全智能對齊引擎」")
 st.markdown("---")
 
 # 頂部核心財務看板
@@ -87,33 +87,39 @@ page_choice = st.sidebar.radio("切換功能頁面", [
 st.sidebar.markdown("---")
 st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，數據互不干涉！")
 
-# ------ 頁面 1: 財務總覽 & 預算監控 ------
+# ------ 頁面 1: 財務總覽 & 預算監控 (🔥 完美視覺對稱升級) ------
 if page_choice == "📊 財務總覽 & 預算監控":
-    chart_col, budget_col = st.columns([1, 1.2])
-    with chart_col:
-        st.subheader("💰 本月收入來源分析")
-        fig_inc_data = pd.DataFrame(list(actual_income_map.items()), columns=["收入分類", "金額"])
-        fig_inc_data = fig_inc_data[fig_inc_data["金額"] > 0]
-        if not fig_inc_data.empty:
-            fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Solar)
-            fig_inc.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=15, b=15), height=260)
-            st.plotly_chart(fig_inc, use_container_width=True)
-        else:
-            st.info("💡 尚無實際收入數據。")
-
-        st.markdown("<br>", unsafe_allow_html=True)
-
-        st.subheader("📊 本月開支分類比例")
-        if total_actual_expense > 0:
-            fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
-            fig_data = fig_data[fig_data["實際支出"] > 0]
-            fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
-            fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=15, b=15), height=260)
-            st.plotly_chart(fig, use_container_width=True)
-        else:
-            st.info("💡 尚無支出數據。")
+    # 調整左右大配置比例（左邊放圖表，右邊放進度條）
+    main_left_col, main_right_col = st.columns([1.4, 1.0])
+    
+    with main_left_col:
+        st.subheader("📊 本月收支結構圖表分析")
+        # 🔥 核心視覺改版：在左側內部再切分左右兩欄，讓兩個圓餅圖「橫向並排」！
+        pie_col1, pie_col2 = st.columns(2)
+        
+        with pie_col1:
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: 0;'>💰 收入來源比例</p>", unsafe_allow_html=True)
+            fig_inc_data = pd.DataFrame(list(actual_income_map.items()), columns=["收入分類", "金額"])
+            fig_inc_data = fig_inc_data[fig_inc_data["金額"] > 0]
+            if not fig_inc_data.empty:
+                fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Solar)
+                fig_inc.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=20, b=20), height=280, showlegend=False)
+                st.plotly_chart(fig_inc, use_container_width=True)
+            else:
+                st.info("💡 尚無實際收入數據。")
+                
+        with pie_col2:
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: 0;'>💸 開支分類比例</p>", unsafe_allow_html=True)
+            if total_actual_expense > 0:
+                fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
+                fig_data = fig_data[fig_data["實際支出"] > 0]
+                fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
+                fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=20, b=20), height=280, showlegend=False)
+                st.plotly_chart(fig, use_container_width=True)
+            else:
+                st.info("💡 尚無支出數據。")
             
-    with budget_col:
+    with main_right_col:
         st.subheader("🎯 Budget Tracker 預算進度條")
         budget_rows = []
         for cat, b_amount in st.session_state.my_budget.items():
@@ -125,7 +131,8 @@ if page_choice == "📊 財務總覽 & 預算監控":
                 "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
                 "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
             })
-        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True, height=580)
+        # 調整表格高度，讓它與左邊並排的圖表完美等高
+        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True, height=315)
 
     st.markdown("---")
     st.subheader("📋 您的歷史收支明細報表")
@@ -144,4 +151,15 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
         c1, c2 = st.columns(2)
         with c1:
             in_date = st.date_input("日期", datetime.now())
-            in_cat = st.selectbox("選擇收入分類", st.session_state.my_income_categories) if in_type ==
+            in_cat = st.selectbox("選擇收入分類", st.session_state.my_income_categories) if in_type == "收入 📥" else st.selectbox("選擇支出分類", list(st.session_state.my_budget.keys()))
+            in_subcat = st.text_input("子分類（如：股票派息、副業、外食）")
+        with c2:
+            in_title = st.text_input("項目名稱")
+            in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
+            in_acc = st.selectbox("動用帳戶/帳戶備註", all_accs)
+            
+        submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
+        if submit_btn and in_amount > 0:
+            if in_type == "收入 📥":
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
+                elif in_acc in st.session_state.my_liabilities
