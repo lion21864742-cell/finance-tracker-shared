@@ -6,13 +6,13 @@ from datetime import datetime
 # ==================== 1. 網頁全域配置 ====================
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
-# ==================== 2. 多用戶獨立狀態初始化引擎 ====================
+# ==================== 2. 獨立狀態初始化引擎 ====================
 if "my_assets" not in st.session_state:
     st.session_state.my_assets = {"現金帳戶 🟢": 15000.0, "銀行儲蓄 🏦": 65000.0}
 if "my_liabilities" not in st.session_state:
     st.session_state.my_liabilities = {"信用卡欠款 🔴": 0.0}
     
-# 🔥 體驗修復：所有初始預算金額一律強制設為 float (加上 .0)，防止 Streamlit 數字類型衝突
+# 所有初始預算金額強制設為 float 浮點數，防止 Streamlit MixedNumericTypesError 報錯
 if "my_budget" not in st.session_state:
     st.session_state.my_budget = {
         "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
@@ -23,18 +23,14 @@ if "my_budget" not in st.session_state:
 if "my_income_categories" not in st.session_state:
     st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
 
-# 核心數據回填：導入真實流水帳明細
+# 導入真實流水帳明細（已嚴格檢查字典語法與引號、冒號閉合）
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
-        # --- 收入明細 ---
         {"日期": "2026/05/01", "類型": "收入 📥", "分類": "薪資", "子分類": "月薪", "項目": "公司發薪", "金額": 25000.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/10", "類型": "收入 📥", "分類": "投資所得", "子分類": "股票派息", "項目": "港股收息", "金額": 3500.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/15", "類型": "收入 📥", "分類": "被動收入", "子分類": "網店/租金", "項目": "副業進帳", "金額": 1500.0, "帳戶/備註": "現金帳戶 🟢"},
-        
-        # --- 支出明細 ---
         {"日期": "2026/05/01", "類型": "支出 💸", "分類": "租金", "子分類": "住屋", "項目": "每月固定租金支出", "金額": 7700.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/05", "類型": "支出 💸", "分類": "交通", "子分類": "特別專款", "項目": "特別交通專款", "金額": 1000.0, "帳戶/備註": "現金帳戶 🟢"},
-        # 🔥 修復手誤：修正 "子妝" 後面漏掉的冒號 ":"
         {"日期": "2026/05/08", "類型": "支出 💸", "分類": "化妝品", "子分類": "子妝", "項目": "專櫃美妝粉餅", "金額": 880.0, "帳戶/備註": "信用卡欠款 🔴"},
         {"日期": "2026/05/12", "類型": "支出 💸", "分類": "電費", "子分類": "公用事業", "項目": "電費（2個月一次）", "金額": 864.0, "帳戶/備註": "銀行儲蓄 🏦"},
         {"日期": "2026/05/14", "類型": "支出 💸", "分類": "娛樂", "子分類": "玩具", "項目": "潮流公仔 Toy", "金額": 517.8, "帳戶/備註": "現金帳戶 🟢"},
@@ -52,7 +48,7 @@ if "my_logs" not in st.session_state:
         {"日期": "2026/05/28", "類型": "支出 💸", "分類": "貓用品", "子分類": "寵物罐頭", "項目": "主子主食罐頭", "金額": 60.0, "帳戶/備註": "現金帳戶 🟢"}
     ]
 
-# ==================== 3. 核心財務數據即時計算引擎 ====================
+# ==================== 3. 數據動態計算引擎 ====================
 total_assets = sum(st.session_state.my_assets.values())
 total_liabilities = sum(st.session_state.my_liabilities.values())
 net_worth = total_assets - total_liabilities
@@ -67,19 +63,18 @@ actual_income_map = {cat: 0.0 for cat in st.session_state.my_income_categories}
 if not df_current_logs.empty:
     df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
     
-    # 1. 統計實際收入
+    # 統計實際收入
     df_income_only = df_current_logs[df_current_logs["類型"] == "收入 📥"]
     total_actual_income = float(df_income_only["金額"].sum())
     for cat in actual_income_map.keys():
         actual_income_map[cat] = float(df_income_only[df_income_only["分類"] == cat]["金額"].sum())
         
-    # 2. 統計實際支出
+    # 統計實際支出
     df_expenses_only = df_current_logs[df_current_logs["類型"] == "支出 💸"]
     total_actual_expense = float(df_expenses_only["金額"].sum())
     for cat in actual_spent_map.keys():
         actual_spent_map[cat] = float(df_expenses_only[df_expenses_only["分類"] == cat]["金額"].sum())
 
-# 計算儲蓄指標
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
 
@@ -96,7 +91,7 @@ m_col3.metric("📈 預計儲蓄 (Savings)", f"${expected_savings:,.2f}", delta=
 m_col4.metric("👑 當前淨身家 (Net Worth)", f"${net_worth:,.2f}")
 st.markdown("---")
 
-# 側邊欄：導覽選單
+# 側邊欄選單
 page_choice = st.sidebar.radio("切換功能頁面", [
     "📊 財務總覽 & 預算監控", 
     "💸 每日單筆記帳 (收/支)", 
@@ -104,7 +99,7 @@ page_choice = st.sidebar.radio("切換功能頁面", [
     "⚙️ 自訂您的資產/預算初始值"
 ])
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，個人流水帳即時渲染更新！")
+st.sidebar.info("💡 **提示：** 個人流水帳即時渲染更新，保障獨立安全空間！")
 
 # ------ 頁面 1: 財務總覽 & 預算監控 ------
 if page_choice == "📊 財務總覽 & 預算監控":
@@ -117,9 +112,9 @@ if page_choice == "📊 財務總覽 & 預算監控":
         with pie_col1:
             st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💰 收入來源比例</p>", unsafe_allow_html=True)
             fig_inc_data = pd.DataFrame(list(actual_income_map.items()), columns=["收入分類", "金額"])
-            # 🔥 防禦性安全修復：確保過濾後的金額總和大於 0 才畫圖，防止 Plotly 找不到欄位報錯
+            # 🔥 安全閥門：確保大於 0 才畫圖，杜絕 Plotly 找不到欄位而噴紅字
             fig_inc_data = fig_inc_data[fig_inc_data["金額"] > 0]
-            if not fig_inc_data.empty and fig_inc_data["金額"].sum() > 0:
+            if not fig_inc_data.empty:
                 fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Solar)
                 fig_inc.update_traces(
                     textposition='inside', textinfo='label+percent', texttemplate='%{label}<br>%{percent:.1%}',
@@ -136,9 +131,9 @@ if page_choice == "📊 財務總覽 & 預算監控":
         with pie_col2:
             st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💸 開支分類比例</p>", unsafe_allow_html=True)
             fig_exp_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
-            # 🔥 防禦性安全修復：確保開支總和大於 0 才畫圖
+            # 🔥 安全閥門：確保開支總大於 0 才畫圖
             fig_exp_data = fig_exp_data[fig_exp_data["實際支出"] > 0]
-            if not fig_exp_data.empty and fig_exp_data["實際支出"].sum() > 0:
+            if not fig_exp_data.empty:
                 fig = px.pie(fig_exp_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
                 fig.update_traces(
                     textposition='inside', textinfo='label+percent', texttemplate='%{label}<br>%{percent:.1%}',
@@ -185,7 +180,7 @@ if page_choice == "📊 財務總覽 & 預算監控":
     if st.session_state.my_logs:
         st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
         csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
-        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
+        st.download_button(label="📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
 
 # ------ 頁面 2: 每日單筆記帳 ------
 elif page_choice == "💸 每日單筆記帳 (收/支)":
@@ -199,9 +194,9 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
         c1, c2 = st.columns(2)
         with c1:
             in_date = st.date_input("日期", datetime.now())
-            # 🔥 語法修復：改用乾淨俐落的單行 if-else 語法
+            # 🔥 語法修復：三元運算子必須包含 else 分支，已完整補齊
             in_cat = st.selectbox(dynamic_label, st.session_state.my_income_categories) if in_type == "收入 📥" else st.selectbox(dynamic_label, list(st.session_state.my_budget.keys()))
-            in_subcat = st.text_input("子分類（如：股票派息、副業、外食）")
+            in_subcat = st.text_input("子分類（如：外食、服飾、日常交通）")
         with c2:
             in_title = st.text_input("項目名稱")
             in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
@@ -281,26 +276,4 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     with col_s1:
         st.write("### 🟢 設定您的資產初始餘額")
         for k, v in list(st.session_state.my_assets.items()):
-            # 強制轉換為 float
             st.session_state.my_assets[k] = float(st.number_input(f"【{k}】可用餘額 ($)", value=float(v), key=f"asset_input_key_{k}"))
-        st.write("### 🔴 設定您的負債初始欠款")
-        for k, v in list(st.session_state.my_liabilities.items()):
-            # 強制轉換為 float
-            st.session_state.my_liabilities[k] = float(st.number_input(f"【{k}】應還欠款 ($)", value=float(v), key=f"lia_input_key_{k}"))
-            
-    with col_s2:
-        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
-        for cat, b_val in list(st.session_state.my_budget.items()):
-            # 🔥 終極核心修復：把 value 強制轉成 float(b_val)，對齊 step=100.0 的浮點數類型，完美解決 MixedNumericTypesError 報錯！
-            st.session_state.my_budget[cat] = float(st.number_input(f"📊 修改【{cat}】月預算", value=float(b_val), min_value=0.0, step=100.0, key=f"budget_input_key_{cat}"))
-            
-        st.markdown("---")
-        st.write("### 💰 自訂您的收入項目分類")
-        st.caption("目前擁有的收入分類： " + " 、 ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
-        
-        add_inc_cat = st.text_input("➕ 輸入想新增的收入分類名稱（例如：副業收入）", key="add_new_income_cat_text")
-        if st.button("確認新增此收入分類 🚀"):
-            if add_inc_cat.strip() and add_inc_cat.strip() not in st.session_state.my_income_categories:
-                st.session_state.my_income_categories.append(add_inc_cat.strip())
-                st.success(f"✅ 已成功新增分類：{add_inc_cat.strip()}")
-                st.rerun()
