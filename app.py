@@ -137,7 +137,7 @@ if page_choice == "📊 財務總覽 & 預算監控":
     st.markdown("---")
     st.subheader("📋 您的歷史收支明細報表")
     if st.session_state.my_logs:
-        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[:-1], use_container_width=True, hide_index=True)
         csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
 
