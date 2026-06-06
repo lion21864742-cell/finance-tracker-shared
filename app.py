@@ -24,8 +24,9 @@ if "my_budget" not in st.session_state:
 if "my_logs" not in st.session_state:
     st.session_state.my_logs = [
         {"日期": "2026/05/01", "類型": "收入 📥", "分類": "收入", "子分類": "薪資", "項目": "公司發薪", "金額": 25000.0, "帳戶/備註": "銀行儲蓄 🏦"},
-        {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食", "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}
-if "my_income_categories" not in st.session_state:
+        {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食", "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}]
+
+        if "my_income_categories" not in st.session_state:
     st.session_state.my_income_categories = ["薪資", "被動收入", "股息收入", "投資獲利", "其他收入"]    
 
 # ==================== 3. 核心財務數據即時計算 ====================
