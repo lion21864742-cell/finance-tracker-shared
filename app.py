@@ -145,4 +145,63 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
     upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
     if upload_file is not None:
         try:
-            df_imported
+            df_imported = pd.read_csv(upload_file, encoding='utf-8-sig') if upload_file.name.endswith('.csv') else pd.read_excel(upload_file)
+            if "日期 (Date)" in df_imported.columns: df_imported = df_imported.rename(columns={"日期 (Date)": "日期"})
+            if "備註" in df_imported.columns: df_imported = df_imported.rename(columns={"備註": "帳戶/備註"})
+            
+            required = ["日期", "分類", "項目", "金額"]
+            if not all(x in df_imported.columns for x in required):
+                st.error("❌ 格式不符！表格第一排必須包含欄位：『日期 (Date)』, 『分類』, 『項目』, 『金額』。")
+            else:
+                df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
+                df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
+                df_imported = df_imported.dropna(subset=["分類", "金額"])
+                df_imported = df_imported[df_imported["金額"] > 0]
+                
+                st.success(f"✅ 檔案辨識成功！讀取到 {len(df_imported)} 筆開支明細。")
+                st.dataframe(df_imported, use_container_width=True, hide_index=True)
+                
+                if st.button("🔥 確定將上載數據併入我的專屬系統"):
+                    for _, row in df_imported.iterrows():
+                        st.session_state.my_logs.append({
+                            "日期": str(row.get("日期")), "分類": str(row.get("分類")), "子分類": str(row.get("子分類", "未分類")),
+                            "項目": str(row.get("項目", "批量匯入")), "金額": float(row.get("金額", 0.0)), "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
+                        })
+                    st.toast("🚀 舊數據已合併！預算及圖表已更新！")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"讀取失敗：{e}")
+
+# ------ 頁面 4: 自訂您的資產/預算初始值（🔥 這裡加入了自訂 Budget 功能） ------
+elif page_choice == "⚙️ 自訂您的資產/預算初始值":
+    st.subheader("⚙️ 個人化財務設定後台")
+    st.markdown("您可以在這裡直接修改銀行餘額，也可以**自由調整各分類的每月的預算上限**。")
+    
+    if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary"):
+        st.session_state.my_logs = []
+        st.rerun()
+        
+    st.markdown("---")
+    
+    # 用欄位切分：左邊改錢，右邊改 Budget
+    col_s1, col_s2 = st.columns(2)
+    
+    with col_s1:
+        st.write("### 🟢 設定您的資產初始餘額")
+        for k, v in list(st.session_state.my_assets.items()):
+            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_{k}")
+        
+        st.write("### 🔴 設定您的負債初始欠款")
+        for k, v in list(st.session_state.my_liabilities.items()):
+            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_{k}")
+
+    # 🔥 右側：全新加入的每月預算在線修改面板
+    with col_s2:
+        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
+        st.caption("更改下方數字後，前台的進度條跟超支警告燈號會即時同步計算！")
+        
+        for cat, b_val in list(st.session_state.my_budget.items()):
+            # 建立每一個分類的數字輸入框
+            new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_{cat}")
+            # 即時寫回系統記憶體
+            st.session_state.my_budget[cat] = new_budget
