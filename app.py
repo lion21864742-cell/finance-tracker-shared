@@ -3,48 +3,234 @@ import pandas as pd
 import plotly.express as px
 from datetime import datetime
 
-# 1. 網頁配置
-st.set_page_config(page_title="💎 Cloud Finance Master Plan 2026", layout="wide")
+# ==================== 1. 網頁全域配置 ====================
+st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
-# 2. 狀態初始化 (強制 float 確保不報錯)
+# ==================== 2. 多用戶獨立狀態初始化引擎 ====================
 if "my_assets" not in st.session_state:
-    st.session_state.my_assets = {"現金": 15000.0, "銀行": 65000.0}
+    st.session_state.my_assets = {"現金帳戶 🟢": 10000.0, "銀行儲蓄 🏦": 50000.0}
+if "my_liabilities" not in st.session_state:
+    st.session_state.my_liabilities = {"信用卡欠款 🔴": 2000.0}
+    
+# 預算初始架構
 if "my_budget" not in st.session_state:
-    st.session_state.my_budget = {"飲食": 3000.0, "租金": 7700.0, "交通": 1700.0}
+    st.session_state.my_budget = {
+        "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
+        "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
+        "貓用品": 500.0, "其他": 500.0
+    }
 
-# 3. 繪圖前的安全防禦機制 (這是解決你 AttributeError 的關鍵)
-def plot_safe_pie(data, values, names, title):
-    st.subheader(title)
-    # 必須檢查 Dataframe 是否為空，且數值總和大於 0，否則 Plotly 會當機
-    if not data.empty and data[values].sum() > 0:
-        fig = px.pie(data, values=values, names=names, hole=0.4)
-        st.plotly_chart(fig, use_container_width=True)
-    else:
-        st.info("💡 目前尚無資料可繪製圖表。")
+# 初始化流水帳（預設加入一筆收入與一筆支出範例）
+if "my_logs" not in st.session_state:
+    st.session_state.my_logs = [
+        {"日期": "2026/05/01", "類型": "收入 📥", "分類": "收入", "子分類": "薪資", "項目": "公司發薪", "金額": 25000.0, "帳戶/備註": "銀行儲蓄 🏦"},
+        {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食", "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}
+    ]
 
-# 4. 你的核心輸入介面 (已修正三元運算子語法)
-st.title("💎 Cloud Finance Master Plan 2026")
-st.caption("🚀 雲端收支全功能分享版")
+# ==================== 3. 核心財務數據即時計算 ====================
+total_assets = sum(st.session_state.my_assets.values())
+total_liabilities = sum(st.session_state.my_liabilities.values())
+net_worth = total_assets - total_liabilities
 
-# 修正行 147 的三元運算子錯誤：必須要有 else
-in_type = st.selectbox("選擇交易類型", ["收入", "支出"])
-in_cat = st.selectbox("分類", ["薪資", "投資"]) if in_type == "收入" else st.selectbox("分類", ["飲食", "交通"])
+# 轉成 DataFrame 開始精確統計收入與支出
+df_current_logs = pd.DataFrame(st.session_state.my_logs)
+total_actual_income = 0.0
+total_actual_expense = 0.0
+actual_spent_map = {cat: 0.0 for cat in st.session_state.my_budget.keys()}
 
-# 5. 數值輸入 (修正類型錯誤)
-val = float(st.number_input("金額", value=100.0, step=100.0))
+if not df_current_logs.empty:
+    # 確保金額格式正確
+    df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
+    
+    # 1. 計算總收入（類型為收入，或者分類叫收入）
+    is_income_mask = (df_current_logs["類型"] == "收入 📥") | (df_current_logs["分類"] == "收入")
+    total_actual_income = float(df_current_logs[is_income_mask]["金額"].sum())
+    
+    # 2. 計算各分類的支出總和（排除收入項目）
+    df_expenses_only = df_current_logs[~is_income_mask]
+    total_actual_expense = float(df_expenses_only["金額"].sum())
+    
+    for cat in actual_spent_map.keys():
+        actual_spent_map[cat] = float(df_expenses_only[df_expenses_only["分類"] == cat]["金額"].sum())
 
-# 6. 範例字典 (修正 line 38 的語法錯誤)
-# 確保每一行都正確閉合
-my_entry = {
-    "日期": "2026/05/08", 
-    "類型": "支出", 
-    "分類": "化妝品", 
-    "項目": "專櫃美妝粉餅", 
-    "金額": 880.0
-}
-# 錯誤修正範例
-if fig_inc_data is not None and not fig_inc_data.empty:
-    fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4)
-    st.plotly_chart(fig_inc)
-else:
-    st.write("目前無資料顯示")
+# 計算儲蓄指標
+expected_savings = total_actual_income - total_actual_expense
+savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
+
+# ==================== 4. 網頁 UI 視覺介面 ====================
+st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
+st.caption("🚀 雲端收支全功能分享版 — 支援「收入/支出雙引擎」與「儲蓄率動態追蹤看板」")
+st.markdown("---")
+
+# 頂部核心財務看板（串聯你原有的 Excel 核心指標）
+m_col1, m_col2, m_col3, m_col4 = st.columns(4)
+m_col1.metric("💰 本月總收入 (Income)", f"${total_actual_income:,.2f}")
+m_col2.metric("💸 本月總支出 (Actual)", f"${total_actual_expense:,.2f}")
+m_col3.metric("📈 預計儲蓄 (Savings)", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
+m_col4.metric("👑 當前淨身家 (Net Worth)", f"${net_worth:,.2f}")
+st.markdown("---")
+
+# 側邊欄：導覽選單
+st.sidebar.title(" Menu 功能選單")
+page_choice = st.sidebar.radio("切換功能頁面", [
+    "📊 財務總覽 & 預算監控", 
+    "💸 每日單筆記帳 (收/支)", 
+    "📤 批量上載 Excel/CSV 檔案",
+    "⚙️ 自訂您的資產/預算初始值"
+])
+
+st.sidebar.markdown("---")
+st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，每個人打開網址看到的都是自己專屬輸入的數據，互不干涉！")
+
+# ==================== 頁面邏輯切換 ====================
+
+# ------ 頁面 1: 財務總覽 & 預算監控 ------
+if page_choice == "📊 財務總覽 & 預算監控":
+    chart_col, budget_col = st.columns([1, 1.2])
+    
+    with chart_col:
+        st.subheader("📊 本月開支分類比例")
+        if total_actual_expense > 0:
+            fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
+            fig_data = fig_data[fig_data["實際支出"] > 0]
+            fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
+            fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10))
+            st.plotly_chart(fig, use_container_width=True)
+        else:
+            st.info("💡 尚無支出數據，圓餅圖將於您記帳或上載後自動呈現。")
+            
+    with budget_col:
+        st.subheader("🎯 Budget Tracker 預算進度條")
+        budget_rows = []
+        for cat, b_amount in st.session_state.my_budget.items():
+            a_amount = actual_spent_map.get(cat, 0.0)
+            remaining = b_amount - a_amount
+            use_rate = (a_amount / b_amount) * 100 if b_amount > 0 else 0.0
+            
+            if use_rate >= 100: status_icon = "🔴 已超支"
+            elif use_rate >= 80: status_icon = "🟡 預警"
+            else: status_icon = "🟢 正常"
+            
+            budget_rows.append({
+                "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
+                "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
+            })
+        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True)
+
+    st.markdown("---")
+    st.subheader("📋 您的歷史收支明細報表")
+    if st.session_state.my_logs:
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
+        csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
+        st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
+
+# ------ 頁面 2: 每日單筆記帳 (收/支雙引擎) ------
+elif page_choice == "💸 每日單筆記帳 (收/支)":
+    st.subheader("📥 填寫日常單筆收支")
+    all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
+    
+    with st.form("share_single_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
+            in_date = st.date_input("日期", datetime.now())
+            in_type = st.selectbox("交易類型", ["支出 💸", "收入 📥"])
+        with c2:
+            # 如果是收入，分類預設叫收入；如果是支出，就讓用戶選預算分類
+            in_cat = st.selectbox("分類", ["收入"] + list(st.session_state.my_budget.keys())) if in_type == "收入 📥" else st.selectbox("分類", list(st.session_state.my_budget.keys()))
+            in_subcat = st.text_input("子分類（如：薪資、外食、零食）")
+        with c3:
+            in_title = st.text_input("項目名稱（如：公司發薪、譚仔）")
+            in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
+            in_acc = st.selectbox("動用帳戶/帳戶備註", all_accs)
+            
+        submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
+        if submit_btn and in_amount > 0:
+            # 連動影響資產或負債餘額
+            if in_type == "收入 📥":
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
+                log_cat = "收入"
+            else:
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] -= in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
+                log_cat = in_cat
+            
+            st.session_state.my_logs.append({
+                "日期": in_date.strftime("%Y/%m/%d"), "類型": in_type, "分類": log_cat, "子分類": in_subcat, "項目": in_title, "金額": in_amount, "帳戶/備註": in_acc
+            })
+            st.success(f"✅ 成功記入一筆{in_type}：{in_title} ${in_amount}")
+            st.rerun()
+
+# ------ 頁面 3: 批量上載 Excel/CSV 檔案 ------
+elif page_choice == "📤 批量上載 Excel/CSV 檔案":
+    st.subheader("📤 批量匯入您現有的記帳表格")
+    st.markdown("您可以直接將您常用的記帳 Excel/CSV 檔案拖曳至下方。系統支援自動對齊『日期 (Date)』, 『分類』, 『項目』, 『金額』欄位。")
+    
+    upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
+    if upload_file is not None:
+        try:
+            df_imported = pd.read_csv(upload_file, encoding='utf-8-sig') if upload_file.name.endswith('.csv') else pd.read_excel(upload_file)
+            if "日期 (Date)" in df_imported.columns: df_imported = df_imported.rename(columns={"日期 (Date)": "日期"})
+            if "備註" in df_imported.columns: df_imported = df_imported.rename(columns={"備註": "帳戶/備註"})
+            
+            required = ["日期", "分類", "項目", "金額"]
+            if not all(x in df_imported.columns for x in required):
+                st.error("❌ 格式不符！表格第一排必須包含欄位：『日期 (Date)』, 『分類』, 『項目』, 『金額』。")
+            else:
+                df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
+                df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
+                df_imported = df_imported.dropna(subset=["分類", "金額"])
+                df_imported = df_imported[df_imported["金額"] > 0]
+                
+                st.success(f"✅ 檔案辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
+                st.dataframe(df_imported, use_container_width=True, hide_index=True)
+                
+                if st.button("🔥 確定將上載數據併入我的專屬系統"):
+                    for _, row in df_imported.iterrows():
+                        row_cat = str(row.get("分類"))
+                        # 自動判定這筆批量數據是收入還是支出
+                        row_type = "收入 📥" if (row_cat == "收入" or "收入" in str(row.get("類型", ""))) else "支出 💸"
+                        
+                        st.session_state.my_logs.append({
+                            "日期": str(row.get("日期")), "類型": row_type, "分類": row_cat, "子分類": str(row.get("子分類", "未分類")),
+                            "項目": str(row.get("項目", "批量匯入")), "金額": float(row.get("金額", 0.0)), "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
+                        })
+                    st.toast("🚀 數據已成功合併！收入與支出看板已同步更新！")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"讀取失敗：{e}")
+
+# ------ 頁面 4: 自訂您的資產/預算初始值 ------
+elif page_choice == "⚙️ 自訂您的資產/預算初始值":
+    st.subheader("⚙️ 個人化財務設定後台")
+    st.markdown("您可以在這裡直接修改銀行餘額，也可以自由調整各分類的每月的預算上限。")
+    
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary", use_container_width=True):
+            st.session_state.my_logs = []
+            st.rerun()
+    with col_btn2:
+        if st.button("✨ 點我快速一鍵套用系統預設預算值", type="secondary", use_container_width=True):
+            st.session_state.my_budget = {
+                "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
+                "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
+                "貓用品": 500.0, "其他": 500.0
+            }
+            st.toast("✅ 已成功載入預算組合！")
+            st.rerun()
+        
+    st.markdown("---")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.write("### 🟢 設定您的資產初始餘額")
+        for k, v in list(st.session_state.my_assets.items()):
+            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_input_key_{k}")
+        st.write("### 🔴 設定您的負債初始欠款")
+        for k, v in list(st.session_state.my_liabilities.items()):
+            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_input_key_{k}")
+    with col_s2:
+        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
+        for cat, b_val in list(st.session_state.my_budget.items()):
+            new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_key_{cat}")
+            st.session_state.my_budget[cat] = new_budget
