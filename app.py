@@ -87,34 +87,36 @@ page_choice = st.sidebar.radio("切換功能頁面", [
 st.sidebar.markdown("---")
 st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，數據互不干涉！")
 
-# ------ 頁面 1: 財務總覽 & 預算監控 (🔥 完美視覺對稱升級) ------
+# ------ 頁面 1: 財務總覽 & 預算監控 ------
 if page_choice == "📊 財務總覽 & 預算監控":
-    # 調整左右大配置比例（左邊放圖表，右邊放進度條）
     main_left_col, main_right_col = st.columns([1.4, 1.0])
     
     with main_left_col:
         st.subheader("📊 本月收支結構圖表分析")
-        # 🔥 核心視覺改版：在左側內部再切分左右兩欄，讓兩個圓餅圖「橫向並排」！
         pie_col1, pie_col2 = st.columns(2)
         
         with pie_col1:
-            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: 0;'>💰 收入來源比例</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💰 收入來源比例</p>", unsafe_allow_html=True)
             fig_inc_data = pd.DataFrame(list(actual_income_map.items()), columns=["收入分類", "金額"])
             fig_inc_data = fig_inc_data[fig_inc_data["金額"] > 0]
             if not fig_inc_data.empty:
+                # 🔥 視覺重組：優化 textinfo，讓文字直接在圓餅圖上顯示分類和百分比
                 fig_inc = px.pie(fig_inc_data, values="金額", names="收入分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Solar)
-                fig_inc.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=20, b=20), height=280, showlegend=False)
+                fig_inc.update_traces(textposition='inside', textinfo='label+percent')
+                fig_inc.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), height=280, showlegend=False)
                 st.plotly_chart(fig_inc, use_container_width=True)
             else:
                 st.info("💡 尚無實際收入數據。")
                 
         with pie_col2:
-            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: 0;'>💸 開支分類比例</p>", unsafe_allow_html=True)
+            st.markdown("<p style='text-align: center; font-weight: bold; margin-bottom: -10px;'>💸 開支分類比例</p>", unsafe_allow_html=True)
             if total_actual_expense > 0:
                 fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
                 fig_data = fig_data[fig_data["實際支出"] > 0]
+                # 🔥 視覺重組：支出圓餅圖同步隱藏側邊圖例，將標籤內嵌，釋放極大化空間
                 fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
-                fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=20, b=20), height=280, showlegend=False)
+                fig.update_traces(textposition='inside', textinfo='label+percent')
+                fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=30, b=10), height=280, showlegend=False)
                 st.plotly_chart(fig, use_container_width=True)
             else:
                 st.info("💡 尚無支出數據。")
@@ -131,7 +133,6 @@ if page_choice == "📊 財務總覽 & 預算監控":
                 "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
                 "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
             })
-        # 調整表格高度，讓它與左邊並排的圖表完美等高
         st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True, height=315)
 
     st.markdown("---")
