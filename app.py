@@ -277,3 +277,23 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         st.write("### 🟢 設定您的資產初始餘額")
         for k, v in list(st.session_state.my_assets.items()):
             st.session_state.my_assets[k] = float(st.number_input(f"【{k}】可用餘額 ($)", value=float(v), key=f"asset_input_key_{k}"))
+        st.write("### 🔴 設定您的負債初始欠款")
+        for k, v in list(st.session_state.my_liabilities.items()):
+            st.session_state.my_liabilities[k] = float(st.number_input(f"【{k}】應還欠款 ($)", value=float(v), key=f"lia_input_key_{k}"))
+            
+    with col_s2:
+        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
+        for cat, b_val in list(st.session_state.my_budget.items()):
+            # 🔥 終極核心修復：強制將數值轉成 float(b_val) 以適應 step=100.0，完美解決 MixedNumericTypesError 報錯！
+            st.session_state.my_budget[cat] = float(st.number_input(f"📊 修改【{cat}】月預算", value=float(b_val), min_value=0.0, step=100.0, key=f"budget_input_key_{cat}"))
+            
+        st.markdown("---")
+        st.write("### 💰 自訂您的收入項目分類")
+        st.caption("目前擁有的收入分類： " + " 、 ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
+        
+        add_inc_cat = st.text_input("➕ 輸入想新增的收入分類名稱（例如：副業收入）", key="add_new_income_cat_text")
+        if st.button("確認新增此收入分類 🚀"):
+            if add_inc_cat.strip() and add_inc_cat.strip() not in st.session_state.my_income_categories:
+                st.session_state.my_income_categories.append(add_inc_cat.strip())
+                st.success(f"✅ 已成功新增分類：{add_inc_cat.strip()}")
+                st.rerun()
