@@ -177,7 +177,7 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
             
             required = ["日期", "分類", "項目", "金額"]
             if not all(x in df_imported.columns for x in required):
-                st.error("❌ 格式不符！表格第一排必須包含欄位：『日期 (Date)』, 『分類』, 『項目』, 『金額』。")
+                st.error("❌ 格式不符！表格第一排必須包含欄位：『日期 (Date)』, 『分類』, 『子分類』,『項目』, 『金額』,『備註』。")
             else:
                 df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
                 df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
