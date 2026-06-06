@@ -137,7 +137,7 @@ if page_choice == "📊 財務總覽 & 預算監控":
     st.markdown("---")
     st.subheader("📋 您的歷史收支明細報表")
     if st.session_state.my_logs:
-        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[:-1], use_container_width=True, hide_index=True)
+        st.dataframe(pd.DataFrame(st.session_state.my_logs).iloc[::-1], use_container_width=True, hide_index=True)
         csv_data = pd.DataFrame(st.session_state.my_logs).to_csv(index=False).encode('utf-8-sig')
         st.download_button("📥 匯出這份明細成 Excel/CSV 下載", data=csv_data, file_name="My_Finance_Log.csv", mime="text/csv")
 
@@ -162,4 +162,96 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
         if submit_btn and in_amount > 0:
             if in_type == "收入 📥":
                 if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
-                elif in_acc in st.session_state.my_liabilities
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
+            else:
+                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] -= in_amount
+                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
+            
+            st.session_state.my_logs.append({
+                "日期": in_date.strftime("%Y/%m/%d"), "類型": in_type, "分類": in_cat, "子分類": in_subcat, "項目": in_title, "金額": in_amount, "帳戶/備註": in_acc
+            })
+            st.success(f"✅ 成功記入一筆 {in_type}：{in_title} ${in_amount}")
+            st.rerun()
+
+# ------ 頁面 3: 批量上載 ------
+elif page_choice == "📤 批量上載 Excel/CSV 檔案":
+    st.subheader("📤 批量匯入您現有的記帳表格")
+    upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
+    if upload_file is not None:
+        try:
+            df_imported = pd.read_csv(upload_file, encoding='utf-8-sig') if upload_file.name.endswith('.csv') else pd.read_excel(upload_file)
+            if "日期 (Date)" in df_imported.columns: df_imported = df_imported.rename(columns={"日期 (Date)": "日期"})
+            if "備註" in df_imported.columns: df_imported = df_imported.rename(columns={"備註": "帳戶/備註"})
+            
+            required = ["日期", "分類", "項目", "金額"]
+            if not all(x in df_imported.columns for x in required):
+                st.error("❌ 格式不符！第一排必須包含欄位：『日期』, 『分類』, 『項目』, 『金額』。")
+            else:
+                df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
+                df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
+                df_imported = df_imported.dropna(subset=["分類", "金額"])[df_imported["金額"] > 0]
+                
+                st.success(f"✅ 檔案辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
+                st.dataframe(df_imported, use_container_width=True, hide_index=True)
+                
+                if st.button("🔥 確定將上載數據併入我的專屬系統"):
+                    for _, row in df_imported.iterrows():
+                        row_cat = str(row.get("分類")).strip()
+                        if row_cat in st.session_state.my_income_categories or "收入" in row_cat:
+                            row_type = "收入 📥"
+                        else:
+                            row_type = "支出 💸"
+                        
+                        st.session_state.my_logs.append({
+                            "日期": str(row.get("日期")), "類型": row_type, "分類": row_cat, "子分類": str(row.get("子分類", "未分類")),
+                            "項目": str(row.get("項目", "批量匯入")), "金額": float(row.get("金額", 0.0)), "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
+                        })
+                    st.toast("🚀 數據合併完成！動態收支看板已全面對齊！")
+                    st.rerun()
+        except Exception as e:
+            st.error(f"讀取失敗：{e}")
+
+# ------ 頁面 4: 自訂您的資產/預算初始值 ------
+elif page_choice == "⚙️ 自訂您的資產/預算初始值":
+    st.subheader("⚙️ 個人化財務設定後台")
+    col_btn1, col_btn2 = st.columns(2)
+    with col_btn1:
+        if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary", use_container_width=True):
+            st.session_state.my_logs = []
+            st.rerun()
+    with col_btn2:
+        if st.button("✨ 點我快速一鍵套用系統預設預算值", type="secondary", use_container_width=True):
+            st.session_state.my_budget = {
+                "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
+                "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
+                "貓用品": 500.0, "其他": 500.0
+            }
+            st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
+            st.toast("✅ 已成功重設支出與收入的經典預設組合！")
+            st.rerun()
+        
+    st.markdown("---")
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.write("### 🟢 設定您的資產初始餘額")
+        for k, v in list(st.session_state.my_assets.items()):
+            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_input_key_{k}")
+        st.write("### 🔴 設定您的負債初始欠款")
+        for k, v in list(st.session_state.my_liabilities.items()):
+            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_input_key_{k}")
+            
+    with col_s2:
+        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
+        for cat, b_val in list(st.session_state.my_budget.items()):
+            st.session_state.my_budget[cat] = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_key_{cat}")
+            
+        st.markdown("---")
+        st.write("### 💰 自訂您的收入項目分類")
+        st.caption("目前擁有的收入分類： " + " 、 ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
+        
+        add_inc_cat = st.text_input("➕ 輸入想新增的收入分類名稱（例如：副業收入）", key="add_new_income_cat_text")
+        if st.button("確認新增此收入分類 🚀"):
+            if add_inc_cat.strip() and add_inc_cat.strip() not in st.session_state.my_income_categories:
+                st.session_state.my_income_categories.append(add_inc_cat.strip())
+                st.success(f"✅ 已成功新增分類：{add_inc_cat.strip()}")
+                st.rerun()
