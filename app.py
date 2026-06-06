@@ -203,54 +203,51 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
 # ------ 頁面 4: 自訂您的資產/預算初始值 ------
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.subheader("⚙️ 個人化財務設定後台")
-    st.markdown("您可以在這裡直接修改銀行餘額，也可以自由調整各分類的每月的預算上限。")
     
+    # 1. 基礎設定區
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🚨 清空我目前輸入的所有資料（重設網頁）", type="primary", use_container_width=True):
+        if st.button("🚨 清空所有資料（重設）", type="primary", use_container_width=True):
             st.session_state.my_logs = []
             st.rerun()
     with col_btn2:
-        if st.button("✨ 點我快速一鍵套用系統預設預算值", type="secondary", use_container_width=True):
+        if st.button("✨ 套用預設預算值", type="secondary", use_container_width=True):
             st.session_state.my_budget = {
                 "飲食": 3000.0, "租金": 7700.0, "交通": 1700.0, "化妝品": 1000.0,
                 "家用品": 500.0, "娛樂": 700.0, "園藝": 300.0, "電費": 1000.0,
                 "貓用品": 500.0, "其他": 500.0
             }
-            st.toast("✅ 已成功載入預算組合！")
             st.rerun()
-        
-    st.markdown("---")
-    col_s1, col_s2 = st.columns(2)
-    with col_s1:
-        st.write("### 🟢 設定您的資產初始餘額")
-        for k, v in list(st.session_state.my_assets.items()):
-            st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=v, key=f"asset_input_key_{k}")
-        st.write("### 🔴 設定您的負債初始欠款")
-        for k, v in list(st.session_state.my_liabilities.items()):
-            st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=v, key=f"lia_input_key_{k}")
-    with col_s2:
-        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
-        for cat, b_val in list(st.session_state.my_budget.items()):
-            new_budget = st.number_input(f"📊 修改【{cat}】月預算", value=b_val, min_value=0.0, step=100.0, key=f"budget_input_key_{cat}")
-            st.session_state.my_budget[cat] = new_budget
 
-st.markdown("---")
+    st.markdown("---")
+    
+    # 2. 收入分類自訂區 (這是你最想要的功能)
     st.write("### ➕ 自訂您的收入項目分類")
     
-    # 顯示目前已有的分類，方便確認
-    st.caption("目前系統中的收入分類： " + ", ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
+    # 確保分類清單存在
+    if "my_income_categories" not in st.session_state:
+        st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
+        
+    st.caption("目前分類： " + ", ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
     
-    # 輸入新分類
-    new_cat = st.text_input("輸入你想新增的收入分類名稱（例如：股息收入）")
-    
-    if st.button("確認新增此分類 🚀"):
-        # 防呆機制：檢查是否為空字串，且是否已存在
-        if new_cat.strip() and new_cat.strip() not in st.session_state.my_income_categories:
-            st.session_state.my_income_categories.append(new_cat.strip())
-            st.success(f"✅ 已成功新增分類：{new_cat.strip()}")
-            st.rerun() # 重新執行頁面，讓記帳頁面的下拉選單即時更新
-        elif new_cat.strip() in st.session_state.my_income_categories:
-            st.warning("⚠️ 這個分類已經存在了！")
+    new_cat = st.text_input("輸入新收入分類名稱（例如：股息收入）")
+    if st.button("確認新增分類"):
+        if new_cat and new_cat not in st.session_state.my_income_categories:
+            st.session_state.my_income_categories.append(new_cat)
+            st.success(f"✅ 已新增：{new_cat}")
+            st.rerun()
         else:
-            st.error("❌ 請輸入有效的分類名稱。")
+            st.warning("⚠️ 輸入無效或分類已存在！")
+
+    st.markdown("---")
+    
+    # 3. 資產與預算調整區
+    col_s1, col_s2 = st.columns(2)
+    with col_s1:
+        st.write("### 🟢 設定資產與負債")
+        for k, v in st.session_state.my_assets.items():
+            st.session_state.my_assets[k] = st.number_input(f"{k} ($)", value=float(v))
+    with col_s2:
+        st.write("### 🎯 調整每月預算上限")
+        for cat, b_val in st.session_state.my_budget.items():
+            st.session_state.my_budget[cat] = st.number_input(f"{cat} 預算 ($)", value=float(b_val), step=100.0)
