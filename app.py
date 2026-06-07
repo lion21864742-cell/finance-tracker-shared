@@ -203,14 +203,14 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
             st.success(f"✅ 成功記入：{in_title} ${in_amount}")
             st.rerun()
 
-# ------ 面 3: 批量上載 Excel/CSV 檔案 ------
+# ------ 頁面 3: 批量上載 Excel/CSV 檔案 ------
 elif page_choice == "📤 批量上載 Excel/CSV 檔案":
     st.subheader("📤 批量匯入現有的記帳明細表格")
     st.info("💡 請確保您的 Excel/CSV 標題包含以下四個欄位：【日期】、【分類】、【項目】、【金額】")
     
     upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
     
-   if upload_file is not None:
+    if upload_file is not None:
         try:
             # 1. 讀取檔案
             if upload_file.name.endswith('.csv'):
