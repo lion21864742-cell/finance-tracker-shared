@@ -219,66 +219,70 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
             else:
                 df_imported = pd.read_excel(upload_file)
             
-            # 💡 智慧修正 1：自動修剪所有文字空格，並踢走完全空白嘅行同埋列
-            df_imported = df_imported.dropna(how='all').dropna(axis=1, how='all')
+            # 🔥 智慧修正 1：先踢走完全空白嘅行同列
+            df_imported = df_imported.dropna(how='all')
+            if "Unnamed" in df_imported.columns or df_imported.columns.str.contains('Unnamed').any():
+                df_imported = df_imported.dropna(axis=1, how='all')
             
-            # 💡 智慧修正 2：如果第一行全部係 NaN 或者空字串，代表標題列喺第二行，自動將第二行升做 Header
-            if df_imported.columns.str.contains('Unnamed').all() or df_imported.iloc[0].astype(str).str.contains('日期').any():
-                # 搵出邊一行先至係真正含有「日期」嘅標題列
-                for idx in range(len(df_imported)):
-                    if df_imported.iloc[idx].astype(str).str.contains('日期').any():
-                        df_imported.columns = df_imported.iloc[idx]
-                        df_imported = df_imported.iloc[idx+1:].reset_index(drop=True)
-                        break
-
-            # 💡 智慧修正 3：模糊欄位匹配（解決「日期 (Date)」對唔到「日期」嘅問題）
-            col_mapping = {}
-            for col in df_imported.columns:
-                col_str = str(col).strip()
-                if "日期" in col_str: col_mapping[col] = "日期"
-                elif "分類" in col_str: col_mapping[col] = "分類"
-                elif "項目" in col_str: col_mapping[col] = "項目"
-                elif "金額" in col_str: col_mapping[col] = "金額"
-                elif "子分類" in col_str: col_mapping[col] = "子分類"
-                elif "備註" in col_str or "帳戶" in col_str: col_mapping[col] = "帳戶/備註"
-
-            df_imported = df_imported.rename(columns=col_mapping)
-            
-            # 2. 檢查四大關鍵欄位
-            required = ["日期", "分類", "項目", "金額"]
-            if not all(x in df_imported.columns for x in required):
-                st.error("❌ 格式不符！表格必須包含欄位：『日期』, 『分類』, 『項目』, 『金額』")
-                st.write("目前偵測到的欄位有：", list(df_imported.columns))
+            # 🔥 智慧修正 2：【安全關鍵】如果表格是空的，直接中止，防止 iloc 報錯
+            if df_imported.empty:
+                st.warning("⚠️ 上傳的檔案中沒有偵測到任何數據，請檢查檔案內容。")
             else:
-                # 3. 數據清洗：抹除掉 Excel 格式化帶來的 $ 或 ,
-                df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
-                df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
-                df_imported = df_imported[df_imported["金額"] > 0]
+                # 智慧修正 3：尋找真正的標題列（兼容第一行是空行的情況）
+                if df_imported.columns.str.contains('Unnamed').all() or df_imported.iloc[0].astype(str).str.contains('日期').any() or not any(x in df_imported.columns for x in ["日期", "分類", "項目", "金額"]):
+                    for idx in range(len(df_imported)):
+                        if df_imported.iloc[idx].astype(str).str.contains('日期').any():
+                            df_imported.columns = df_imported.iloc[idx].astype(str).str.strip()
+                            df_imported = df_imported.iloc[idx+1:].reset_index(drop=True)
+                            break
+
+                # 智慧修正 4：模糊欄位匹配
+                col_mapping = {}
+                for col in df_imported.columns:
+                    col_str = str(col).strip()
+                    if "日期" in col_str: col_mapping[col] = "日期"
+                    elif "分類" in col_str: col_mapping[col] = "分類"
+                    elif "項目" in col_str: col_mapping[col] = "項目"
+                    elif "金額" in col_str: col_mapping[col] = "金額"
+                    elif "子分類" in col_str: col_mapping[col] = "子分類"
+                    elif "備註" in col_str or "帳戶" in col_str: col_mapping[col] = "帳戶/備註"
+
+                df_imported = df_imported.rename(columns=col_mapping)
                 
-                st.success(f"✅ 辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
-                st.dataframe(df_imported[["日期", "分類", "項目", "金額"]], use_container_width=True, hide_index=True)
-                
-                if st.button("🔥 確定將上載數據併入系統帳本"):
-                    for _, row in df_imported.iterrows():
-                        row_cat = str(row.get("分類")).strip()
-                        
-                        # 智慧分類辨識：只要符合自設收入、或者有名稱包含「收入/薪資」，就當收入
-                        if row_cat in st.session_state.my_income_categories or "收入" in row_cat or "薪資" in row_cat:
-                            row_type = "收入 📥"
-                        else:
-                            row_type = "支出 💸"
+                # 2. 檢查四大關鍵欄位
+                required = ["日期", "分類", "項目", "金額"]
+                if not all(x in df_imported.columns for x in required):
+                    st.error("❌ 格式不符！表格必須包含欄位：『日期』, 『分類』, 『項目』, 『金額』")
+                    st.write("目前偵測到的欄位有：", list(df_imported.columns))
+                else:
+                    # 3. 數據清洗：移除金額的 $ 和 , 符號
+                    df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
+                    df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
+                    df_imported = df_imported[df_imported["金額"] > 0]
+                    
+                    st.success(f"✅ 辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
+                    st.dataframe(df_imported[["日期", "分類", "項目", "金額"]], use_container_width=True, hide_index=True)
+                    
+                    if st.button("🔥 確定將上載數據併入系統帳本"):
+                        for _, row in df_imported.iterrows():
+                            row_cat = str(row.get("分類")).strip()
                             
-                        st.session_state.my_logs.append({
-                            "日期": str(row.get("日期")).strip(),
-                            "類型": row_type,
-                            "分類": row_cat,
-                            "子分類": str(row.get("子分類", "批量匯入")),
-                            "項目": str(row.get("項目", "未命名項目")),
-                            "金額": float(row.get("金額", 0.0)),
-                            "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
-                        })
-                    st.success("🚀 數據已成功批量合併！財務圖表已同步更新！")
-                    st.rerun()
+                            if row_cat in st.session_state.my_income_categories or "收入" in row_cat or "薪資" in row_cat:
+                                row_type = "收入 📥"
+                            else:
+                                row_type = "支出 💸"
+                                
+                            st.session_state.my_logs.append({
+                                "日期": str(row.get("日期")).strip(),
+                                "類型": row_type,
+                                "分類": row_cat,
+                                "子分類": str(row.get("子分類", "批量匯入")),
+                                "項目": str(row.get("項目", "未命名項目")),
+                                "金額": float(row.get("金額", 0.0)),
+                                "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
+                            })
+                        st.success("🚀 數據已成功批量合併！財務圖表已同步更新！")
+                        st.rerun()
         except Exception as e:
             st.error(f"❌ 讀取失敗，原因：{e}")
             
