@@ -188,42 +188,58 @@ if page_choice == "📊 財務總覽 & 預算監控":
 
 # ------ 頁面 3: 批量上載 Excel/CSV 檔案 ------
 elif page_choice == "📤 批量上載 Excel/CSV 檔案":
-    st.subheader("📤 批量匯入您現有的記帳表格")
-    st.markdown("您可以直接將您常用的記帳 Excel/CSV 檔案拖曳至下方。系統支援自動對齊『日期 (Date)』, 『分類』, 『項目』, 『金額』欄位。")
+    st.subheader("📤 批量匯入現有的記帳明細表格")
+    st.info("💡 請確保您的 Excel/CSV 第一排標題包含以下四個欄位：【日期】、【分類】、【項目】、【金額】")
     
     upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
+    
     if upload_file is not None:
         try:
-            df_imported = pd.read_csv(upload_file, encoding='utf-8-sig') if upload_file.name.endswith('.csv') else pd.read_excel(upload_file)
-            if "日期 (Date)" in df_imported.columns: df_imported = df_imported.rename(columns={"日期 (Date)": "日期"})
-            if "備註" in df_imported.columns: df_imported = df_imported.rename(columns={"備註": "帳戶/備註"})
+            # 自動支援 CSV 與 Excel，並解決 Big5 編碼問題
+            if upload_file.name.endswith('.csv'):
+                try:
+                    df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
+                except:
+                    df_imported = pd.read_csv(upload_file, encoding='big5')
+            else:
+                df_imported = pd.read_excel(upload_file)
             
+            # 欄位對齊清洗
             required = ["日期", "分類", "項目", "金額"]
             if not all(x in df_imported.columns for x in required):
-                st.error("❌ 格式不符！表格第一排必須包含欄位：『日期 (Date)』, 『分類』, 『子分類』,『項目』, 『金額』,『備註』。")
+                st.error("❌ 格式不符！表格必須包含欄位：『日期』, 『分類』, 『項目』, 『金額』。")
             else:
+                # 金額文字格式清洗
                 df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
                 df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
-                df_imported = df_imported.dropna(subset=["分類", "金額"])
                 df_imported = df_imported[df_imported["金額"] > 0]
                 
-                st.success(f"✅ 檔案辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
+                st.success(f"✅ 辨識成功！讀取到 {len(df_imported)} 筆收支資料。")
                 st.dataframe(df_imported, use_container_width=True, hide_index=True)
                 
-                if st.button("🔥 確定將上載數據併入我的專屬系統"):
+                if st.button("🔥 確定將上載數據併入系統帳本"):
                     for _, row in df_imported.iterrows():
-                        row_cat = str(row.get("分類"))
-                        # 自動判定這筆批量數據是收入還是支出
-                        row_type = "收入 📥" if (row_cat == "收入" or "收入" in str(row.get("類型", ""))) else "支出 💸"
+                        row_cat = str(row.get("分類")).strip()
                         
+                        # 💡 智慧識別：如果 Excel 分類屬於你的自訂收入清單，就自動判定為收入
+                        if row_cat in st.session_state.my_income_categories or "收入" in row_cat or "薪資" in row_cat:
+                            row_type = "收入 📥"
+                        else:
+                            row_type = "支出 💸"
+                            
                         st.session_state.my_logs.append({
-                            "日期": str(row.get("日期")), "類型": row_type, "分類": row_cat, "子分類": str(row.get("子分類", "未分類")),
-                            "項目": str(row.get("項目", "批量匯入")), "金額": float(row.get("金額", 0.0)), "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
+                            "日期": str(row.get("日期")), 
+                            "類型": row_type, 
+                            "分類": row_cat, 
+                            "子分類": str(row.get("子分類", "批量匯入")), 
+                            "項目": str(row.get("項目", "未命名項目")), 
+                            "金額": float(row.get("金額", 0.0)), 
+                            "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
                         })
-                    st.toast("🚀 數據已成功合併！收入與支出看板已同步更新！")
+                    st.toast("🚀 數據已成功批量合併！圖表已同步更新！")
                     st.rerun()
         except Exception as e:
-            st.error(f"讀取失敗：{e}")
+            st.error(f"讀取失敗，原因：{e}")
 
 # ------ 頁面 4: 自訂您的資產/預算初始值 ------
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
