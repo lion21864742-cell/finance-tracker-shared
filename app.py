@@ -214,23 +214,23 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
         try:
             # 1. 讀取檔案
             if upload_file.name.endswith('.csv'):
-                try:
-                    df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
-                except:
-                    df_imported = pd.read_csv(upload_file, encoding='big5')
- else:
-    df_imported = pd.read_excel(
-        upload_file,
-        engine="openpyxl",
-        dtype=str 
+               try:
+                  df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
+               except:
+                  df_imported = pd.read_csv(upload_file, encoding='big5')
+            else:
+                df_imported = pd.read_excel(
+                    upload_file,
+                    engine="openpyxl",
+                    dtype=str
     )
-    df_imported.columns = df_imported.columns.astype(str).str.strip() 
-    df_imported.columns = df_imported.columns.astype(str).str.strip()
-            
-            # 🔥 智慧修正 1：先踢走完全空白嘅行同列
-            df_imported = df_imported.dropna(how='all')
-            if "Unnamed" in df_imported.columns or df_imported.columns.str.contains('Unnamed').any():
-                df_imported = df_imported.dropna(axis=1, how='all')
+
+df_imported.columns = df_imported.columns.astype(str).str.strip()
+
+# 🔥 智慧修正 1：先踢走完全空白嘅行同列
+df_imported = df_imported.dropna(how='all')
+if "Unnamed" in df_imported.columns or df_imported.columns.str.contains('Unnamed').any():
+    df_imported = df_imported.dropna(axis=1, how='all')
             
             # 🔥 智慧修正 2：【安全關鍵】如果表格是空的，直接中止，防止 iloc 報錯
             if df_imported.empty:
