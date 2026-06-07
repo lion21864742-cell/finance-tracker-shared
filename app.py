@@ -238,9 +238,7 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
 
 if (
     cols.str.contains("Unnamed").all()
-    or df_imported.iloc[0].astype(str).str.contains("日期").any()
-    or not all(x in cols for x in ["日期","分類","項目","金額"])
-):
+    or df_imported.iloc[0].astype(str).str.contains("日期").any() or not all(x in cols for x in ["日期","分類","項目","金額"])):
                     for idx in range(len(df_imported)):
                         if df_imported.iloc[idx].astype(str).str.contains('日期').any():
                             df_imported.columns = df_imported.iloc[idx].astype(str).str.strip()
