@@ -130,21 +130,18 @@ if page_choice == "📊 財務總覽 & 預算監控":
     # 確保基本分類存在
     if "my_income_categories" not in st.session_state:
         st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
-
-    with st.form("share_single_form", clear_on_submit=True):
-        c2, c3 = st.columns(2)  # 改為兩欄更實用整齊
-        with c2:
+with st.form("share_single_form", clear_on_submit=True):
+        c1, c2, c3 = st.columns(3)
+        with c1:
             in_date = st.date_input("日期", datetime.now())
             in_type = st.selectbox("交易類型", ["支出 💸", "收入 📥"])
-            
-            # 🔥 關鍵修正：如果是收入，直接讀取全域的自訂收入分類清單！
+        with c2:
+            # 🔥 智慧選單：如果是收入，讀取自訂收入清單！如果是支出，讀取預算清單！
             if in_type == "收入 📥":
-                in_cat = st.selectbox("分類", st.session_state.my_income_categories, key="income_select_key")
+                in_cat = st.selectbox("分類", st.session_state.my_income_categories)
             else:
-                in_cat = st.selectbox("分類", list(st.session_state.my_budget.keys()), key="expense_select_key")
-                
-            in_subcat = st.text_input("子分類 (如：薪資、外食、零食)")
-
+                in_cat = st.selectbox("分類", list(st.session_state.my_budget.keys()))
+            in_subcat = st.text_input("子分類 (如：薪資、外食、零售)")
         with c3:
             in_title = st.text_input("項目名稱 (如：公司發薪、譚仔)")
             in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
@@ -153,37 +150,25 @@ if page_choice == "📊 財務總覽 & 預算監控":
         submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
         
         if submit_btn and in_amount > 0:
-            # 智慧更新資產/負債
+            # 智慧連動增減資產或負債（單行寫法，防止縮排報錯）
             if in_type == "收入 📥":
                 if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
-                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
+                if in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
             else:
                 if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] -= in_amount
-                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
+                if in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
 
             # 寫入歷史紀錄
             st.session_state.my_logs.append({
-                "日期": in_date.strftime("%Y/%m/%d"), 
-                "類型": in_type, 
-                "分類": in_cat, 
-                "子分類": in_subcat, 
-                "項目": in_title, 
-                "金額": float(in_amount), 
+                "日期": in_date.strftime("%Y/%m/%d"),
+                "類型": in_type,
+                "分類": in_cat,
+                "子分類": in_subcat,
+                "項目": in_title,
+                "金額": float(in_amount),
                 "帳戶/備註": in_acc
             })
             st.success(f"✅ 成功記入：{in_title} ${in_amount}")
-            st.rerun()
-                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
-                log_cat = "收入"
-            else:
-                if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] -= in_amount
-                elif in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] += in_amount
-                log_cat = in_cat
-            
-            st.session_state.my_logs.append({
-                "日期": in_date.strftime("%Y/%m/%d"), "類型": in_type, "分類": log_cat, "子分類": in_subcat, "項目": in_title, "金額": in_amount, "帳戶/備註": in_acc
-            })
-            st.success(f"✅ 成功記入一筆{in_type}：{in_title} ${in_amount}")
             st.rerun()
 
 # ------ 頁面 3: 批量上載 Excel/CSV 檔案 ------
