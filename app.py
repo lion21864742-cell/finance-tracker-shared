@@ -2,7 +2,9 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
+import openpyxl
 
+st.write("openpyxl version:", openpyxl.__version__)
 # ==================== 1. 網頁全域配置 ====================
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
