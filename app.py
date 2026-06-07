@@ -218,11 +218,14 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                     df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
                 except:
                     df_imported = pd.read_csv(upload_file, encoding='big5')
-            else:
-                df_imported = pd.read_excel(
-    upload_file,
-    engine="openpyxl"
-)
+ else:
+    df_imported = pd.read_excel(
+        upload_file,
+        engine="openpyxl",
+        dtype=str 
+    )
+    df_imported.columns = df_imported.columns.astype(str).str.strip() 
+    df_imported.columns = df_imported.columns.astype(str).str.strip()
             
             # 🔥 智慧修正 1：先踢走完全空白嘅行同列
             df_imported = df_imported.dropna(how='all')
