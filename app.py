@@ -210,24 +210,22 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
     
     upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
     
-    if upload_file is not None:
+   if upload_file is not None:
         try:
             # 1. 讀取檔案
-if upload_file.name.endswith('.csv'):
-    try:
-        df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
-    except:
-        df_imported = pd.read_csv(upload_file, encoding='big5')
-else:
-    df_imported = pd.read_excel(
-        upload_file,
-        engine="openpyxl",
-        dtype=str
-    )
-
-df_imported.columns = df_imported.columns.astype(str).str.strip()
-
-# 🔥 智慧修正 1：先踢走完全空白嘅行同列
+            if upload_file.name.endswith('.csv'):
+                try:
+                    df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
+                except:
+                    df_imported = pd.read_csv(upload_file, encoding='big5')
+            else:
+                df_imported = pd.read_excel(
+                    upload_file,
+                    engine="openpyxl",
+                    dtype=str
+                )
+            df_imported.columns = df_imported.columns.astype(str).str.strip()
+            # 🔥 智慧修正 1：先踢走完全空白嘅行同列
 df_imported = df_imported.dropna(how='all')
 if "Unnamed" in df_imported.columns or df_imported.columns.str.contains('Unnamed').any():
     df_imported = df_imported.dropna(axis=1, how='all')
