@@ -232,11 +232,11 @@ df_imported = df_imported.dropna(how='all')
 if "Unnamed" in df_imported.columns or df_imported.columns.str.contains('Unnamed').any():
     df_imported = df_imported.dropna(axis=1, how='all')
             
-            # 🔥 智慧修正 2：【安全關鍵】如果表格是空的，直接中止，防止 iloc 報錯
-            if df_imported.empty:
+# 🔥 智慧修正 2：【安全關鍵】如果表格是空的，直接中止，防止 iloc 報錯
+if df_imported.empty:
                 st.warning("⚠️ 上傳的檔案中沒有偵測到任何數據，請檢查檔案內容。")
-            else:
-            # 智慧修正 3：尋找真正的標題列（兼容第一行是空行的情況）
+else:
+# 智慧修正 3：尋找真正的標題列（兼容第一行是空行的情況）
                 if df_imported.columns.str.contains('Unnamed').all() or df_imported.iloc[0].astype(str).str.contains('日期').any() or not any(x in df_imported.columns for x in ["日期", "分類", "項目", "金額"]):
                     for idx in range(len(df_imported)):
                         if df_imported.iloc[idx].astype(str).str.contains('日期').any():
