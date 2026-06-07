@@ -234,12 +234,14 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                 st.warning("⚠️ 上傳的檔案中沒有偵測到任何數據，請檢查檔案內容。")
             else:
                 # 智慧修正 3：尋找真正的標題列（兼容第一行是空行的情況）
-                if df_imported.columns.str.contains('Unnamed').all() or df_imported.iloc[0].astype(str).str.contains('日期').any() or not any(x in df_imported.columns for x in ["日期", "分類", "項目", "金額"]):
+                  cols = pd.Index(df_imported.columns.astype(str)
+                                           )if cols.str.contains('Unnamed').all() or df_imported.iloc[0].astype(str).str.contains('日期').any() or not any(x in df_imported.columns for x in ["日期", "分類", "項目", "金額"]):
                     for idx in range(len(df_imported)):
                         if df_imported.iloc[idx].astype(str).str.contains('日期').any():
                             df_imported.columns = df_imported.iloc[idx].astype(str).str.strip()
                             df_imported = df_imported.iloc[idx+1:].reset_index(drop=True)
                             break
+                          
 
                 # 智慧修正 4：模糊欄位匹配
                 col_mapping = {}
