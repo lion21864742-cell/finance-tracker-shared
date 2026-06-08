@@ -4,3 +4,5 @@ openpyxl
 plotly
 numpy
 xlsxwriter
+firebase-admin
+requests
