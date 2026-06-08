@@ -2,36 +2,155 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 from datetime import datetime
-import openpyxl
+import firebase_admin
+from firebase_admin import credentials, firestore, auth as admin_auth
+import requests
+import json
+import os
 
-st.write("openpyxl version:", openpyxl.__version__)
-# ==================== 1. 網頁全域配置 ====================
-st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
+# ==================== Firebase 初始化 ====================
+FIREBASE_API_KEY = "AIzaSyCWAcZjTZ02lc2-ILd3rY-hZa0qmM-F-ik"
+FIREBASE_PROJECT_ID = "finance-tracker-shared"
 
-# ==================== 2. 多用戶獨立狀態初始化引擎 ====================
-if "my_assets" not in st.session_state:
-    st.session_state.my_assets = {"現金帳戶 🟢": 0.0, "銀行儲蓄 🏦": 0.0}
-if "my_liabilities" not in st.session_state:
-    st.session_state.my_liabilities = {"信用卡欠款 🔴": 0.0}
+# 初始化 Firebase Admin SDK（用 Streamlit secrets 或 環境變數）
+if not firebase_admin._apps:
+    try:
+        # 優先從 Streamlit secrets 讀取（部署用）
+        sa = dict(st.secrets["firebase_service_account"])
+        cred = credentials.Certificate(sa)
+    except Exception:
+        # 本地開發：放 serviceAccountKey.json 在同目錄
+        cred = credentials.Certificate("serviceAccountKey.json")
+    firebase_admin.initialize_app(cred)
 
-if "my_budget" not in st.session_state:
-    st.session_state.my_budget = {
-        "飲食": 0.0, "租金": 0.0, "交通": 0.0, "化妝品": 0.0,
-        "家用品": 0.0, "娛樂": 0.0, "電費": 0.0,
-        "寵物用品": 0.0, "其他支出": 0.0, "其他收入": 0.0, "薪資": 0.0,
-        "股票收入": 0.0
+db = firestore.client()
+
+# ==================== 登入/註冊 Helper ====================
+def sign_in(email, password):
+    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
+    r = requests.post(url, json={"email": email, "password": password, "returnSecureToken": True})
+    return r.json()
+
+def sign_up(email, password):
+    url = f"https://identitytoolkit.googleapis.com/v1/accounts:signUp?key={FIREBASE_API_KEY}"
+    r = requests.post(url, json={"email": email, "password": password, "returnSecureToken": True})
+    return r.json()
+
+# ==================== Firestore 讀寫 Helper ====================
+def load_user_data(uid):
+    doc = db.collection("users").document(uid).get()
+    if doc.exists:
+        return doc.to_dict()
+    return None
+
+def save_user_data(uid, data):
+    db.collection("users").document(uid).set(data)
+
+def get_default_data():
+    return {
+        "assets": {"現金帳戶 🟢": 0.0, "銀行儲蓄 🏦": 0.0},
+        "liabilities": {"信用卡欠款 🔴": 0.0},
+        "budget": {
+            "飲食": 0.0, "租金": 0.0, "交通": 0.0, "化妝品": 0.0,
+            "家用品": 0.0, "娛樂": 0.0, "電費": 0.0,
+            "寵物用品": 0.0, "其他支出": 0.0, "其他收入": 0.0,
+            "薪資": 0.0, "股票收入": 0.0
+        },
+        "income_categories": ["薪資", "投資所得", "被動收入", "其他收入"],
+        "logs": [
+            {"日期": "2026/05/01", "類型": "收入 📥", "分類": "收入", "子分類": "薪資",
+             "項目": "公司發薪", "金額": 25000.0, "帳戶/備註": "銀行儲蓄 🏦"},
+            {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食",
+             "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}
+        ]
     }
 
-if "my_logs" not in st.session_state:
-    st.session_state.my_logs = [
-        {"日期": "2026/05/01", "類型": "收入 📥", "分類": "收入", "子分類": "薪資", "項目": "公司發薪", "金額": 25000.0, "帳戶/備註": "銀行儲蓄 🏦"},
-        {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食", "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}
-    ]
+# ==================== 網頁配置 ====================
+st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
-if "my_income_categories" not in st.session_state:
-    st.session_state.my_income_categories = ["薪資", "投資所得", "被動收入", "其他收入"]
+# ==================== 登入狀態管理 ====================
+if "uid" not in st.session_state:
+    st.session_state.uid = None
+if "user_email" not in st.session_state:
+    st.session_state.user_email = None
 
-# ==================== 3. 核心財務數據即時計算 ====================
+# ==================== 登入/註冊頁面 ====================
+if st.session_state.uid is None:
+    st.title("💎 Cloud Finance Master Plan 2026")
+    st.markdown("---")
+
+    tab_login, tab_signup = st.tabs(["🔑 登入", "📝 註冊新帳號"])
+
+    with tab_login:
+        st.subheader("登入你的帳號")
+        login_email = st.text_input("電郵", key="login_email")
+        login_pw = st.text_input("密碼", type="password", key="login_pw")
+        if st.button("登入 🚀", use_container_width=True):
+            if login_email and login_pw:
+                result = sign_in(login_email, login_pw)
+                if "idToken" in result:
+                    st.session_state.uid = result["localId"]
+                    st.session_state.user_email = login_email
+                    # 載入或初始化用戶數據
+                    data = load_user_data(st.session_state.uid)
+                    if data is None:
+                        data = get_default_data()
+                        save_user_data(st.session_state.uid, data)
+                    st.session_state.my_assets = data.get("assets", {})
+                    st.session_state.my_liabilities = data.get("liabilities", {})
+                    st.session_state.my_budget = data.get("budget", {})
+                    st.session_state.my_income_categories = data.get("income_categories", [])
+                    st.session_state.my_logs = data.get("logs", [])
+                    st.success("✅ 登入成功！")
+                    st.rerun()
+                else:
+                    err = result.get("error", {}).get("message", "登入失敗")
+                    st.error(f"❌ {err}")
+            else:
+                st.warning("請輸入電郵和密碼")
+
+    with tab_signup:
+        st.subheader("建立新帳號")
+        signup_email = st.text_input("電郵", key="signup_email")
+        signup_pw = st.text_input("密碼（最少6位）", type="password", key="signup_pw")
+        signup_pw2 = st.text_input("確認密碼", type="password", key="signup_pw2")
+        if st.button("註冊 ✨", use_container_width=True):
+            if not signup_email or not signup_pw:
+                st.warning("請填寫所有欄位")
+            elif signup_pw != signup_pw2:
+                st.error("❌ 兩次密碼不一致")
+            elif len(signup_pw) < 6:
+                st.error("❌ 密碼最少6位")
+            else:
+                result = sign_up(signup_email, signup_pw)
+                if "idToken" in result:
+                    st.session_state.uid = result["localId"]
+                    st.session_state.user_email = signup_email
+                    data = get_default_data()
+                    save_user_data(st.session_state.uid, data)
+                    st.session_state.my_assets = data["assets"]
+                    st.session_state.my_liabilities = data["liabilities"]
+                    st.session_state.my_budget = data["budget"]
+                    st.session_state.my_income_categories = data["income_categories"]
+                    st.session_state.my_logs = data["logs"]
+                    st.success("✅ 註冊成功！歡迎使用！")
+                    st.rerun()
+                else:
+                    err = result.get("error", {}).get("message", "註冊失敗")
+                    st.error(f"❌ {err}")
+    st.stop()
+
+# ==================== 已登入：存檔 Helper ====================
+def save_now():
+    save_user_data(st.session_state.uid, {
+        "assets": st.session_state.my_assets,
+        "liabilities": st.session_state.my_liabilities,
+        "budget": st.session_state.my_budget,
+        "income_categories": st.session_state.my_income_categories,
+        "logs": st.session_state.my_logs
+    })
+
+# ==================== 核心財務計算 ====================
 total_assets = sum(st.session_state.my_assets.values())
 total_liabilities = sum(st.session_state.my_liabilities.values())
 net_worth = total_assets - total_liabilities
@@ -53,20 +172,32 @@ if not df_current_logs.empty:
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
 
-# ==================== 4. 網頁 UI 視覺介面 ====================
+# ==================== 頁面標題 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
 st.caption("🚀 雲端收支全功能分享版 — 支援「收入/支出雙引擎」與「儲蓄率動態追蹤看板」")
+
+# 右上角顯示登入用戶 + 登出
+col_title, col_logout = st.columns([4, 1])
+with col_logout:
+    st.caption(f"👤 {st.session_state.user_email}")
+    if st.button("登出", use_container_width=True):
+        for key in ["uid", "user_email", "my_assets", "my_liabilities",
+                    "my_budget", "my_income_categories", "my_logs"]:
+            if key in st.session_state:
+                del st.session_state[key]
+        st.rerun()
+
 st.markdown("---")
 
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.metric("💰 本月總收入 (Income)", f"${total_actual_income:,.2f}")
-m_col2.metric("💸 本月總支出 (Actual)", f"${total_actual_expense:,.2f}")
-m_col3.metric("📈 預計儲蓄 (Savings)", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
-m_col4.metric("👑 當前淨身家 (Net Worth)", f"${net_worth:,.2f}")
+m_col1.metric("💰 本月總收入", f"${total_actual_income:,.2f}")
+m_col2.metric("💸 本月總支出", f"${total_actual_expense:,.2f}")
+m_col3.metric("📈 預計儲蓄", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
+m_col4.metric("👑 當前淨身家", f"${net_worth:,.2f}")
 st.markdown("---")
 
-# 側邊欄
-st.sidebar.title(" Menu 功能選單")
+# ==================== 側邊欄 ====================
+st.sidebar.title("Menu 功能選單")
 page_choice = st.sidebar.radio("切換功能頁面", [
     "📊 財務總覽 & 預算監控",
     "💸 每日單筆記帳 (收/支)",
@@ -74,20 +205,13 @@ page_choice = st.sidebar.radio("切換功能頁面", [
     "⚙️ 自訂您的資產/預算初始值"
 ])
 st.sidebar.markdown("---")
-st.sidebar.info("💡 **提示：** 本系統為獨立安全空間，每個人打開網址看到的都是自己專屬輸入的數據，互不干涉！")
+st.sidebar.info("💡 數據已雲端儲存，刷新頁面不會消失！")
 
-# 帳戶清單
-all_accs = []
-if "my_assets" in st.session_state:
-    all_accs += list(st.session_state.my_assets.keys())
-if "my_liabilities" in st.session_state:
-    all_accs += list(st.session_state.my_liabilities.keys())
+all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
 if not all_accs:
     all_accs = ["現金", "銀行帳戶"]
 
-# ==================== 頁面邏輯切換 ====================
-
-# ------ 頁面 1: 財務總覽 & 預算監控 ------
+# ==================== 頁面 1: 財務總覽 ====================
 if page_choice == "📊 財務總覽 & 預算監控":
     chart_col, budget_col = st.columns([1, 1.2])
 
@@ -96,11 +220,12 @@ if page_choice == "📊 財務總覽 & 預算監控":
         if total_actual_expense > 0:
             fig_data = pd.DataFrame(list(actual_spent_map.items()), columns=["分類", "實際支出"])
             fig_data = fig_data[fig_data["實際支出"] > 0]
-            fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4, color_discrete_sequence=px.colors.sequential.Mint)
+            fig = px.pie(fig_data, values="實際支出", names="分類", hole=0.4,
+                         color_discrete_sequence=px.colors.sequential.Mint)
             fig.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10))
             st.plotly_chart(fig, use_container_width=True)
         else:
-            st.info("💡 尚無支出數據，圓餅圖將於您記帳或上載後自動呈現。")
+            st.info("💡 尚無支出數據，記帳後自動呈現。")
 
     with budget_col:
         st.subheader("🎯 Budget Tracker 預算進度條")
@@ -116,23 +241,23 @@ if page_choice == "📊 財務總覽 & 預算監控":
             else:
                 status_icon = "🟢 正常"
             budget_rows.append({
-                "分類 (Category)": cat, "預算 (Budget)": f"${b_amount:,.1f}", "已使用 (Actual)": f"${a_amount:,.1f}",
-                "剩餘 (Remaining)": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
+                "分類": cat, "預算": f"${b_amount:,.1f}", "已使用": f"${a_amount:,.1f}",
+                "剩餘": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
             })
         st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True)
 
     st.markdown("---")
-    st.subheader("📋 您的歷史收支明細報表")
+    st.subheader("📋 歷史收支明細")
     if df_current_logs.empty:
         st.info("尚無記帳記錄。")
     else:
         st.dataframe(df_current_logs, use_container_width=True, hide_index=True)
 
-# ------ 頁面 2: 每日單筆記帳 ------
+# ==================== 頁面 2: 單筆記帳 ====================
 elif page_choice == "💸 每日單筆記帳 (收/支)":
     st.subheader("📥 填寫日常單筆收支")
 
-    with st.form("share_single_form", clear_on_submit=True):
+    with st.form("single_entry_form", clear_on_submit=True):
         c1, c2, c3 = st.columns(3)
         with c1:
             in_date = st.date_input("日期", datetime.now())
@@ -144,22 +269,22 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
                 in_cat = st.selectbox("分類", list(st.session_state.my_budget.keys()))
             in_subcat = st.text_input("子分類 (如：外食、零食)")
         with c3:
-            in_title = st.text_input("項目名稱 (如：公司發薪、譚仔)")
+            in_title = st.text_input("項目名稱")
             in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
-            in_acc = st.selectbox("動用帳戶/帳戶備註", all_accs)
+            in_acc = st.selectbox("帳戶", all_accs)
 
-        submit_btn = st.form_submit_button("確認記入我的歷史帳本 🚀")
+        submit_btn = st.form_submit_button("確認記入 🚀")
 
         if submit_btn and in_amount > 0:
             if in_type == "收入 📥":
-                if "my_assets" in st.session_state and in_acc in st.session_state.my_assets:
+                if in_acc in st.session_state.my_assets:
                     st.session_state.my_assets[in_acc] += in_amount
-                if "my_liabilities" in st.session_state and in_acc in st.session_state.my_liabilities:
+                if in_acc in st.session_state.my_liabilities:
                     st.session_state.my_liabilities[in_acc] -= in_amount
             else:
-                if "my_assets" in st.session_state and in_acc in st.session_state.my_assets:
+                if in_acc in st.session_state.my_assets:
                     st.session_state.my_assets[in_acc] -= in_amount
-                if "my_liabilities" in st.session_state and in_acc in st.session_state.my_liabilities:
+                if in_acc in st.session_state.my_liabilities:
                     st.session_state.my_liabilities[in_acc] += in_amount
 
             st.session_state.my_logs.append({
@@ -171,44 +296,35 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
                 "金額": float(in_amount),
                 "帳戶/備註": in_acc
             })
-            st.success(f"✅ 成功記入：{in_title} ${in_amount}")
+            save_now()  # 💾 即時存到 Firebase
+            st.success(f"✅ 已記入並儲存：{in_title} ${in_amount}")
             st.rerun()
 
-# ------ 頁面 3: 批量上載 Excel/CSV 檔案 ------
+# ==================== 頁面 3: 批量上載 ====================
 elif page_choice == "📤 批量上載 Excel/CSV 檔案":
     st.subheader("📤 批量匯入現有的記帳明細表格")
-    st.info("💡 請確保您的 Excel/CSV 標題包含以下四個欄位：【日期】、【分類】、【項目】、【金額】")
+    st.info("💡 請確保 Excel/CSV 標題包含：【日期】、【分類】、【項目】、【金額】")
 
     upload_file = st.file_uploader("上傳您的檔案", type=["csv", "xlsx"])
 
     if upload_file is not None:
         try:
-            # 1. 讀取檔案
             if upload_file.name.endswith('.csv'):
                 try:
                     df_imported = pd.read_csv(upload_file, encoding='utf-8-sig')
                 except:
                     df_imported = pd.read_csv(upload_file, encoding='big5')
             else:
-                df_imported = pd.read_excel(
-                    upload_file,
-                    engine="openpyxl",
-                    dtype=str
-                )
+                df_imported = pd.read_excel(upload_file, engine="openpyxl", dtype=str)
 
-            # 統一欄位名稱格式
             df_imported.columns = df_imported.columns.astype(str).str.strip()
-
-            # 🔥 智慧修正 1：先踢走完全空白嘅行同列
             df_imported = df_imported.dropna(how='all')
             if df_imported.columns.str.contains('Unnamed').any():
                 df_imported = df_imported.dropna(axis=1, how='all')
 
-            # 🔥 智慧修正 2：如果表格是空的，直接中止
             if df_imported.empty:
-                st.warning("⚠️ 上傳的檔案中沒有偵測到任何數據，請檢查檔案內容。")
+                st.warning("⚠️ 沒有偵測到任何數據，請檢查檔案。")
             else:
-                # 🔥 智慧修正 3：尋找真正的標題列
                 if (df_imported.columns.str.contains('Unnamed').all()
                         or df_imported.iloc[0].astype(str).str.contains('日期').any()
                         or not any(x in df_imported.columns for x in ["日期", "分類", "項目", "金額"])):
@@ -218,7 +334,6 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                             df_imported = df_imported.iloc[idx + 1:].reset_index(drop=True)
                             break
 
-                # 🔥 智慧修正 4：模糊欄位匹配
                 col_mapping = {}
                 for col in df_imported.columns:
                     col_str = str(col).strip()
@@ -237,21 +352,19 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
 
                 df_imported = df_imported.rename(columns=col_mapping)
 
-                # 2. 檢查四大關鍵欄位
                 required = ["日期", "分類", "項目", "金額"]
                 if not all(x in df_imported.columns for x in required):
-                    st.error("❌ 格式不符！表格必須包含欄位：『日期』, 『分類』, 『項目』, 『金額』")
-                    st.write("目前偵測到的欄位有：", list(df_imported.columns))
+                    st.error("❌ 格式不符！必須包含：『日期』,『分類』,『項目』,『金額』")
+                    st.write("目前偵測到的欄位：", list(df_imported.columns))
                 else:
-                    # 3. 數據清洗
                     df_imported["金額"] = df_imported["金額"].astype(str).str.replace('$', '').str.replace(',', '').str.strip()
                     df_imported["金額"] = pd.to_numeric(df_imported["金額"], errors='coerce').fillna(0.0)
                     df_imported = df_imported[df_imported["金額"] > 0]
 
-                    st.success(f"✅ 辨識成功！讀取到 {len(df_imported)} 筆收支明細。")
+                    st.success(f"✅ 辨識成功！讀取到 {len(df_imported)} 筆明細。")
                     st.dataframe(df_imported[["日期", "分類", "項目", "金額"]], use_container_width=True, hide_index=True)
 
-                    if st.button("🔥 確定將上載數據併入系統帳本"):
+                    if st.button("🔥 確定併入帳本並儲存到雲端"):
                         for _, row in df_imported.iterrows():
                             row_cat = str(row.get("分類")).strip()
                             if row_cat in st.session_state.my_income_categories or "收入" in row_cat or "薪資" in row_cat:
@@ -267,34 +380,37 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                                 "金額": float(row.get("金額", 0.0)),
                                 "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
                             })
-                        st.success("🚀 數據已成功批量合併！財務圖表已同步更新！")
+                        save_now()  # 💾 存到 Firebase
+                        st.success("🚀 已成功合併並儲存到雲端！")
                         st.rerun()
 
         except Exception as e:
             st.error(f"❌ 讀取失敗，原因：{e}")
 
-# ------ 頁面 4: 自訂初始值與收入分類 ------
+# ==================== 頁面 4: 設定 ====================
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.subheader("⚙️ 個人化財務設定後台")
 
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
-        if st.button("🚨 清空我目前輸入的所有資料 (重設網頁)", type="primary", use_container_width=True):
+        if st.button("🚨 清空所有記帳記錄", type="primary", use_container_width=True):
             st.session_state.my_logs = []
+            save_now()
             st.rerun()
     with col_btn2:
-        if st.button("✨ 點我快速一鍵套用系統預設預算值", type="secondary", use_container_width=True):
+        if st.button("✨ 套用系統預設預算值", type="secondary", use_container_width=True):
             st.session_state.my_budget = {"飲食": 3000.0, "租金": 7000.0, "交通": 1000.0, "其他支出": 500.0}
+            save_now()
             st.rerun()
 
     st.markdown("---")
-    st.write("### ➕ 自訂您的收入項目分類")
+    st.write("### ➕ 自訂收入分類")
     st.caption("目前分類： " + ", ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
-
-    new_cat = st.text_input("輸入新收入分類名稱（例如：股息收入）", key="add_new_income_cat_input")
-    if st.button("確認新增分類 🚀"):
+    new_cat = st.text_input("新收入分類名稱", key="add_new_income_cat_input")
+    if st.button("新增分類 🚀"):
         if new_cat.strip() and new_cat.strip() not in st.session_state.my_income_categories:
             st.session_state.my_income_categories.append(new_cat.strip())
+            save_now()
             st.success(f"✅ 已新增：{new_cat.strip()}")
             st.rerun()
         else:
@@ -303,17 +419,25 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.markdown("---")
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        if "my_assets" in st.session_state:
-            st.write("### 🟢 設定您的資產初始餘額")
-            for k, v in list(st.session_state.my_assets.items()):
-                st.session_state.my_assets[k] = st.number_input(f"【{k}】可用餘額 ($)", value=float(v), key=f"asset_input_{k}")
+        st.write("### 🟢 資產初始餘額")
+        for k, v in list(st.session_state.my_assets.items()):
+            new_val = st.number_input(f"【{k}】", value=float(v), key=f"asset_input_{k}")
+            if new_val != v:
+                st.session_state.my_assets[k] = new_val
+                save_now()
 
-        if "my_liabilities" in st.session_state:
-            st.write("### 🔴 設定您的負債初始欠款")
-            for k, v in list(st.session_state.my_liabilities.items()):
-                st.session_state.my_liabilities[k] = st.number_input(f"【{k}】應還欠款 ($)", value=float(v), key=f"lia_input_{k}")
+        st.write("### 🔴 負債初始欠款")
+        for k, v in list(st.session_state.my_liabilities.items()):
+            new_val = st.number_input(f"【{k}】", value=float(v), key=f"lia_input_{k}")
+            if new_val != v:
+                st.session_state.my_liabilities[k] = new_val
+                save_now()
+
     with col_s2:
-        st.write("### 🎯 調整每月預算上限 (Monthly Budget)")
+        st.write("### 🎯 每月預算上限")
         for cat, b_val in list(st.session_state.my_budget.items()):
-            new_budget = st.number_input(f"修改【{cat}】月預算", value=float(b_val), min_value=0.0, step=100.0, key=f"budget_input_{cat}")
-            st.session_state.my_budget[cat] = new_budget
+            new_budget = st.number_input(f"【{cat}】", value=float(b_val), min_value=0.0,
+                                          step=100.0, key=f"budget_input_{cat}")
+            if new_budget != b_val:
+                st.session_state.my_budget[cat] = new_budget
+                save_now()
