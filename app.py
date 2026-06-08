@@ -248,10 +248,72 @@ if page_choice == "📊 財務總覽 & 預算監控":
 
     st.markdown("---")
     st.subheader("📋 歷史收支明細")
+
     if df_current_logs.empty:
         st.info("尚無記帳記錄。")
     else:
-        st.dataframe(df_current_logs, use_container_width=True, hide_index=True)
+        # 初始化編輯狀態
+        if "editing_index" not in st.session_state:
+            st.session_state.editing_index = None
+
+        logs = st.session_state.my_logs
+
+        for i, log in enumerate(logs):
+            col_date, col_type, col_cat, col_item, col_amt, col_edit, col_del = st.columns([1.2, 1.2, 1, 1.5, 1, 0.5, 0.5])
+            col_date.write(log.get("日期", ""))
+            col_type.write(log.get("類型", ""))
+            col_cat.write(log.get("分類", ""))
+            col_item.write(log.get("項目", ""))
+            col_amt.write(f'${log.get("金額", 0):,.1f}')
+
+            if col_edit.button("✏️", key=f"edit_{i}"):
+                st.session_state.editing_index = i
+
+            if col_del.button("🗑️", key=f"del_{i}"):
+                st.session_state.my_logs.pop(i)
+                save_now()
+                st.success("✅ 已刪除")
+                st.rerun()
+
+            # 展開編輯表單
+            if st.session_state.editing_index == i:
+                with st.form(key=f"edit_form_{i}"):
+                    st.markdown(f"**編輯第 {i+1} 筆記錄**")
+                    e1, e2, e3 = st.columns(3)
+                    with e1:
+                        new_date = st.text_input("日期", value=log.get("日期", ""), key=f"edate_{i}")
+                        new_type = st.selectbox("類型", ["支出 💸", "收入 📥"],
+                            index=0 if log.get("類型") == "支出 💸" else 1, key=f"etype_{i}")
+                    with e2:
+                        new_cat = st.text_input("分類", value=log.get("分類", ""), key=f"ecat_{i}")
+                        new_subcat = st.text_input("子分類", value=log.get("子分類", ""), key=f"esubcat_{i}")
+                    with e3:
+                        new_item = st.text_input("項目", value=log.get("項目", ""), key=f"eitem_{i}")
+                        new_amt = st.number_input("金額", value=float(log.get("金額", 0)), min_value=0.0, key=f"eamt_{i}")
+                        new_acc = st.text_input("帳戶/備註", value=log.get("帳戶/備註", ""), key=f"eacc_{i}")
+
+                    save_btn, cancel_btn = st.columns(2)
+                    with save_btn:
+                        if st.form_submit_button("💾 儲存修改", use_container_width=True):
+                            st.session_state.my_logs[i] = {
+                                "日期": new_date,
+                                "類型": new_type,
+                                "分類": new_cat,
+                                "子分類": new_subcat,
+                                "項目": new_item,
+                                "金額": float(new_amt),
+                                "帳戶/備註": new_acc
+                            }
+                            save_now()
+                            st.session_state.editing_index = None
+                            st.success("✅ 已儲存")
+                            st.rerun()
+                    with cancel_btn:
+                        if st.form_submit_button("取消", use_container_width=True):
+                            st.session_state.editing_index = None
+                            st.rerun()
+
+            st.divider()
 
 # ==================== 頁面 2: 單筆記帳 ====================
 elif page_choice == "💸 每日單筆記帳 (收/支)":
