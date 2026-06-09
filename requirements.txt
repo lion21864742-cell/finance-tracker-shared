@@ -6,3 +6,4 @@ numpy
 xlsxwriter
 firebase-admin
 requests
+yfinance
