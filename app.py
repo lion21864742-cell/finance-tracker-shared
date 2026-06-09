@@ -250,12 +250,12 @@ elif page_choice == "📋 歷史收支明細":
         st.session_state.editing_index = None
 
     # ---- 日期篩選 ----
+    import calendar
     now = datetime.now()
     this_month_start = date(now.year, now.month, 1)
     last_month = now.month - 1 if now.month > 1 else 12
     last_month_year = now.year if now.month > 1 else now.year - 1
     last_month_start = date(last_month_year, last_month, 1)
-    import calendar
     last_month_end = date(last_month_year, last_month,
                           calendar.monthrange(last_month_year, last_month)[1])
 
@@ -276,88 +276,92 @@ elif page_choice == "📋 歷史收支明細":
     if "filter_mode" not in st.session_state:
         st.session_state.filter_mode = "全部"
 
-    # 自訂日期範圍
     if st.session_state.filter_mode == "自訂":
         d_col1, d_col2 = st.columns(2)
         with d_col1:
             custom_start = st.date_input("開始日期", value=this_month_start, key="custom_start")
         with d_col2:
             custom_end = st.date_input("結束日期", value=date.today(), key="custom_end")
+    else:
+        custom_start = this_month_start
+        custom_end = date.today()
 
-    filter_col, export_col = st.columns([3, 1])
-    filter_col.caption(f"目前篩選：**{st.session_state.filter_mode}**")
+    # ---- 排序控制 + 匯出 ----
+    sort_col1, sort_col2, export_col = st.columns([2, 2, 1])
+    with sort_col1:
+        sort_by = st.selectbox("排序方式", ["日期", "類型", "分類", "金額"], key="sort_by")
+    with sort_col2:
+        sort_order = st.radio("順序", ["新→舊 / 高→低", "舊→新 / 低→高"], key="sort_order", horizontal=True)
+    sort_ascending = sort_order == "舊→新 / 低→高"
 
-    # ---- 匯出 Excel ----
-    with export_col:
-        if st.session_state.my_logs:
-            import io
-            export_df = pd.DataFrame(st.session_state.my_logs)
-            # 套用篩選到匯出
-            if st.session_state.get("filter_mode", "全部") != "全部" and not export_df.empty:
-                def parse_date_safe(d):
-                    try:
-                        return datetime.strptime(str(d), "%Y/%m/%d").date()
-                    except:
-                        return None
-                export_df["_date"] = export_df["日期"].apply(parse_date_safe)
-                if st.session_state.filter_mode == "本月":
-                    export_df = export_df[export_df["_date"] >= this_month_start]
-                elif st.session_state.filter_mode == "上月":
-                    export_df = export_df[(export_df["_date"] >= last_month_start) & (export_df["_date"] <= last_month_end)]
-                elif st.session_state.filter_mode == "自訂" and "custom_start" in st.session_state:
-                    export_df = export_df[(export_df["_date"] >= st.session_state.custom_start) & (export_df["_date"] <= st.session_state.custom_end)]
-                export_df = export_df.drop(columns=["_date"], errors="ignore")
-
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                export_df.to_excel(writer, index=False, sheet_name="收支明細")
-            buf.seek(0)
-            filename = f"收支明細_{datetime.now().strftime('%Y%m%d')}.xlsx"
-            st.download_button("📥 匯出 Excel", data=buf, file_name=filename,
-                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-                               use_container_width=True)
-
+    st.caption(f"目前篩選：**{st.session_state.filter_mode}**")
     st.markdown("---")
 
-    # 套用篩選
+    # ---- 套用篩選 ----
     logs = st.session_state.my_logs
-    filtered_indices = []
+    filtered_logs = []
     for i, log in enumerate(logs):
         try:
             log_date = datetime.strptime(str(log.get("日期", "")), "%Y/%m/%d").date()
         except:
             log_date = None
 
+        include = False
         if st.session_state.filter_mode == "全部" or log_date is None:
-            filtered_indices.append(i)
+            include = True
         elif st.session_state.filter_mode == "本月":
             if log_date >= this_month_start:
-                filtered_indices.append(i)
+                include = True
         elif st.session_state.filter_mode == "上月":
             if last_month_start <= log_date <= last_month_end:
-                filtered_indices.append(i)
+                include = True
         elif st.session_state.filter_mode == "自訂":
             if custom_start <= log_date <= custom_end:
-                filtered_indices.append(i)
+                include = True
 
-    if not filtered_indices:
+        if include:
+            filtered_logs.append((i, log, log_date))
+
+    # ---- 套用排序 ----
+    if sort_by == "日期":
+        filtered_logs.sort(key=lambda x: x[2] or date.min, reverse=not sort_ascending)
+    elif sort_by == "類型":
+        filtered_logs.sort(key=lambda x: x[1].get("類型", ""), reverse=not sort_ascending)
+    elif sort_by == "分類":
+        filtered_logs.sort(key=lambda x: x[1].get("分類", ""), reverse=not sort_ascending)
+    elif sort_by == "金額":
+        filtered_logs.sort(key=lambda x: float(x[1].get("金額", 0)), reverse=not sort_ascending)
+
+    # ---- 匯出 Excel ----
+    with export_col:
+        if filtered_logs:
+            import io
+            export_df = pd.DataFrame([log for _, log, _ in filtered_logs])
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                export_df.to_excel(writer, index=False, sheet_name="收支明細")
+            buf.seek(0)
+            filename = f"收支明細_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            st.download_button("📥 匯出", data=buf, file_name=filename,
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
+
+    if not filtered_logs:
         st.info("此時間範圍內沒有記錄。")
     else:
-        st.caption(f"共 {len(filtered_indices)} 筆記錄")
+        st.caption(f"共 {len(filtered_logs)} 筆記錄")
 
-        # 表頭
         h1, h2, h3, h4, h5, h6, h7 = st.columns([1.2, 1.2, 1, 1.5, 1, 0.5, 0.5])
         h1.markdown("**日期**")
         h2.markdown("**類型**")
         h3.markdown("**分類**")
         h4.markdown("**項目**")
         h5.markdown("**金額**")
-        h6.markdown("**編輯**")
-        h7.markdown("**刪除**")
+        h6.markdown("✏️")
+        h7.markdown("🗑️")
         st.markdown("---")
 
-        for i in filtered_indices:
-            log = logs[i]
+        for idx, (i, log, _) in enumerate(filtered_logs):
             col_date, col_type, col_cat, col_item, col_amt, col_edit, col_del = st.columns([1.2, 1.2, 1, 1.5, 1, 0.5, 0.5])
             col_date.write(log.get("日期", ""))
             col_type.write(log.get("類型", ""))
@@ -365,31 +369,30 @@ elif page_choice == "📋 歷史收支明細":
             col_item.write(log.get("項目", ""))
             col_amt.write(f'${log.get("金額", 0):,.1f}')
 
-            if col_edit.button("✏️", key=f"edit_{i}"):
+            if col_edit.button("✏️", key=f"edit_{i}_{idx}"):
                 st.session_state.editing_index = i
 
-            if col_del.button("🗑️", key=f"del_{i}"):
+            if col_del.button("🗑️", key=f"del_{i}_{idx}"):
                 st.session_state.my_logs.pop(i)
                 save_now()
                 st.success("✅ 已刪除")
                 st.rerun()
 
-            # 編輯表單
             if st.session_state.editing_index == i:
-                with st.form(key=f"edit_form_{i}"):
-                    st.markdown(f"**編輯第 {i+1} 筆記錄**")
+                with st.form(key=f"edit_form_{i}_{idx}"):
+                    st.markdown(f"**編輯記錄**")
                     e1, e2, e3 = st.columns(3)
                     with e1:
-                        new_date = st.text_input("日期", value=log.get("日期", ""), key=f"edate_{i}")
+                        new_date = st.text_input("日期", value=log.get("日期", ""), key=f"edate_{i}_{idx}")
                         new_type = st.selectbox("類型", ["支出 💸", "收入 📥"],
-                            index=0 if log.get("類型") == "支出 💸" else 1, key=f"etype_{i}")
+                            index=0 if log.get("類型") == "支出 💸" else 1, key=f"etype_{i}_{idx}")
                     with e2:
-                        new_cat = st.text_input("分類", value=log.get("分類", ""), key=f"ecat_{i}")
-                        new_subcat = st.text_input("子分類", value=log.get("子分類", ""), key=f"esubcat_{i}")
+                        new_cat = st.text_input("分類", value=log.get("分類", ""), key=f"ecat_{i}_{idx}")
+                        new_subcat = st.text_input("子分類", value=log.get("子分類", ""), key=f"esubcat_{i}_{idx}")
                     with e3:
-                        new_item = st.text_input("項目", value=log.get("項目", ""), key=f"eitem_{i}")
-                        new_amt = st.number_input("金額", value=float(log.get("金額", 0)), min_value=0.0, key=f"eamt_{i}")
-                        new_acc = st.text_input("帳戶/備註", value=log.get("帳戶/備註", ""), key=f"eacc_{i}")
+                        new_item = st.text_input("項目", value=log.get("項目", ""), key=f"eitem_{i}_{idx}")
+                        new_amt = st.number_input("金額", value=float(log.get("金額", 0)), min_value=0.0, key=f"eamt_{i}_{idx}")
+                        new_acc = st.text_input("帳戶/備註", value=log.get("帳戶/備註", ""), key=f"eacc_{i}_{idx}")
 
                     sb, cb = st.columns(2)
                     with sb:
@@ -561,8 +564,23 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
 
     st.markdown("---")
     st.write("### ➕ 自訂收入分類")
-    st.caption("目前分類： " + ", ".join([f"`{c}`" for c in st.session_state.my_income_categories]))
-    new_cat = st.text_input("新收入分類名稱", key="add_new_income_cat_input")
+
+    # 顯示現有分類 + 刪除按鈕
+    st.caption("目前分類：")
+    cat_cols = st.columns(min(len(st.session_state.my_income_categories), 4))
+    for idx, cat in enumerate(st.session_state.my_income_categories):
+        with cat_cols[idx % 4]:
+            st.markdown(f"`{cat}`")
+            if st.button(f"✕ 刪除", key=f"del_cat_{idx}"):
+                if len(st.session_state.my_income_categories) > 1:
+                    st.session_state.my_income_categories.pop(idx)
+                    save_now()
+                    st.rerun()
+                else:
+                    st.warning("至少保留一個分類！")
+
+    st.markdown("")
+    new_cat = st.text_input("新增收入分類名稱", key="add_new_income_cat_input")
     if st.button("新增分類 🚀"):
         if new_cat.strip() and new_cat.strip() not in st.session_state.my_income_categories:
             st.session_state.my_income_categories.append(new_cat.strip())
