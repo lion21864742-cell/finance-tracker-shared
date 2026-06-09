@@ -132,22 +132,26 @@ def fetch_price(ticker: str) -> tuple:
         return None, str(e)
 
 def extract_ticker(name: str, currency: str) -> str | None:
-    """從持倉名稱提取 ticker，港股支援純數字"""
+    """從持倉名稱提取 ticker，支援有無空格"""
     import re as _re2
-    # 港股：名稱開頭的 4-5 位數字（如 6869、00700）
+    name = name.strip()
+    # 港股：開頭數字（有無空格均可）
     if currency == "HKD":
-        num_match = _re2.match(r'^(\d{4,5})', name.strip())
+        num_match = _re2.match(r'^(\d{4,5})', name)
         if num_match:
-            code = num_match.group(1).lstrip("0") or "0"
-            return f"{int(code):04d}.HK"
-        # 或名稱中有 .HK
+            code = int(num_match.group(1))
+            return f"{code:04d}.HK"
         hk_match = _re2.search(r'(\d{1,5}\.HK)', name, _re2.IGNORECASE)
         if hk_match:
             return hk_match.group(1).upper()
-    # 美股：大寫英文 ticker（1-5字母）
-    us_match = _re2.search(r'\b([A-Z]{1,5})\b', name)
+    # 美股：開頭 1-5 個大寫英文字母（後面可直接接中文或空格）
+    us_match = _re2.match(r'^([A-Z]{1,5})[\s\u4e00-\u9fff]', name)
     if us_match:
         return us_match.group(1)
+    # fallback：名稱任意位置的大寫英文
+    us_any = _re2.search(r'\b([A-Z]{1,5})\b', name)
+    if us_any:
+        return us_any.group(1)
     return None
 
 # ==================== 登入狀態 ====================
