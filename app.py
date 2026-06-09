@@ -5,7 +5,6 @@ from datetime import datetime, date
 import firebase_admin
 from firebase_admin import credentials, firestore
 import requests
-from streamlit_cookies_controller import CookieController
 
 # ==================== Firebase 初始化 ====================
 FIREBASE_API_KEY = "AIzaSyCWAcZjTZ02lc2-ILd3rY-hZa0qmM-F-ik"
@@ -64,29 +63,26 @@ def get_default_data():
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
 # ==================== 登入狀態 ====================
-# ==================== Cookie 持久登入 ====================
-cookie = CookieController()
-
 if "uid" not in st.session_state:
     st.session_state.uid = None
 if "user_email" not in st.session_state:
     st.session_state.user_email = None
 
-# 嘗試從 cookie 恢復登入
+# 嘗試從 query_params 恢復登入（刷新頁面保持登入）
 if st.session_state.uid is None:
-    uid_cookie = cookie.get("finance_uid")
-    email_cookie = cookie.get("finance_email")
-    if uid_cookie and email_cookie:
-        data = load_user_data(uid_cookie)
+    params = st.query_params
+    uid_param = params.get("uid", None)
+    email_param = params.get("em", None)
+    if uid_param and email_param:
+        data = load_user_data(uid_param)
         if data:
-            st.session_state.uid = uid_cookie
-            st.session_state.user_email = email_cookie
+            st.session_state.uid = uid_param
+            st.session_state.user_email = email_param
             st.session_state.my_assets = data.get("assets", {})
             st.session_state.my_liabilities = data.get("liabilities", {})
             st.session_state.my_budget = data.get("budget", {})
             st.session_state.my_income_categories = data.get("income_categories", [])
             st.session_state.my_logs = data.get("logs", [])
-            st.rerun()
 
 
 # ==================== 登入/註冊頁面 ====================
@@ -114,8 +110,8 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data.get("budget", {})
                     st.session_state.my_income_categories = data.get("income_categories", [])
                     st.session_state.my_logs = data.get("logs", [])
-                    cookie.set("finance_uid", st.session_state.uid)
-                    cookie.set("finance_email", login_email)
+                    st.query_params["uid"] = st.session_state.uid
+                    st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
                     st.rerun()
                 else:
@@ -148,8 +144,8 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data["budget"]
                     st.session_state.my_income_categories = data["income_categories"]
                     st.session_state.my_logs = data["logs"]
-                    cookie.set("finance_uid", st.session_state.uid)
-                    cookie.set("finance_email", signup_email)
+                    st.query_params["uid"] = st.session_state.uid
+                    st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
                     st.rerun()
                 else:
@@ -197,8 +193,7 @@ col_title, col_logout = st.columns([4, 1])
 with col_logout:
     st.caption(f"👤 {st.session_state.user_email}")
     if st.button("登出", use_container_width=True):
-        cookie.remove("finance_uid")
-        cookie.remove("finance_email")
+        st.query_params.clear()
         for key in ["uid", "user_email", "my_assets", "my_liabilities",
                     "my_budget", "my_income_categories", "my_logs"]:
             if key in st.session_state:
