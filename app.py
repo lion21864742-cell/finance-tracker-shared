@@ -113,21 +113,42 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # ==================== 自動抓股價 Helper ====================
-def fetch_price(ticker: str) -> float | None:
-    """用 yfinance 抓最新股價，失敗回傳 None"""
+def fetch_price(ticker: str) -> tuple:
+    """用 yfinance 抓最新股價，回傳 (price, error_msg)"""
     if not YFINANCE_AVAILABLE:
-        return None
+        return None, "yfinance 未安裝"
     try:
-        t = yf.Ticker(ticker.strip().upper())
+        t = yf.Ticker(ticker.strip())
+        hist = t.history(period="5d")
+        if not hist.empty:
+            return round(float(hist["Close"].iloc[-1]), 4), None
+        # fallback
         info = t.fast_info
         price = getattr(info, "last_price", None)
-        if price is None:
-            hist = t.history(period="2d")
-            if not hist.empty:
-                price = float(hist["Close"].iloc[-1])
-        return round(float(price), 4) if price else None
-    except Exception:
-        return None
+        if price:
+            return round(float(price), 4), None
+        return None, "無法取得價格（可能係非交易時段或 ticker 錯誤）"
+    except Exception as e:
+        return None, str(e)
+
+def extract_ticker(name: str, currency: str) -> str | None:
+    """從持倉名稱提取 ticker，港股支援純數字"""
+    import re as _re2
+    # 港股：名稱開頭的 4-5 位數字（如 6869、00700）
+    if currency == "HKD":
+        num_match = _re2.match(r'^(\d{4,5})', name.strip())
+        if num_match:
+            code = num_match.group(1).lstrip("0") or "0"
+            return f"{int(code):04d}.HK"
+        # 或名稱中有 .HK
+        hk_match = _re2.search(r'(\d{1,5}\.HK)', name, _re2.IGNORECASE)
+        if hk_match:
+            return hk_match.group(1).upper()
+    # 美股：大寫英文 ticker（1-5字母）
+    us_match = _re2.search(r'\b([A-Z]{1,5})\b', name)
+    if us_match:
+        return us_match.group(1)
+    return None
 
 # ==================== 登入狀態 ====================
 if "uid" not in st.session_state:
@@ -652,30 +673,28 @@ elif page_choice == "📈 投資持倉記錄":
         if YFINANCE_AVAILABLE:
             if st.button("🔄 自動更新股價", use_container_width=True):
                 updated, failed = 0, []
-                for h in st.session_state.my_holdings:
-                    name = h.get("名稱", "")
-                    ticker_match = _re.search(r'\b([A-Z]{1,5}(?:\.[A-Z]{1,2})?)\b', name)
-                    if ticker_match:
-                        ticker = ticker_match.group(1)
-                        # 港股補上 .HK
-                        if h.get("幣別", "USD") == "HKD" and not ticker.endswith(".HK"):
-                            ticker = ticker + ".HK"
-                        price = fetch_price(ticker)
-                        if price:
-                            h["現價"] = price
-                            h["市值"] = round(h.get("數量", 0) * price, 2)
-                            h["盈虧"] = round(h.get("數量", 0) * (price - h.get("平均成本", 0)), 2)
-                            updated += 1
+                with st.spinner("正在抓取股價，請稍候..."):
+                    for h in st.session_state.my_holdings:
+                        name = h.get("名稱", "")
+                        currency = h.get("幣別", "USD")
+                        ticker = extract_ticker(name, currency)
+                        if ticker:
+                            price, err = fetch_price(ticker)
+                            if price:
+                                h["現價"] = price
+                                h["市值"] = round(h.get("數量", 0) * price, 2)
+                                h["盈虧"] = round(h.get("數量", 0) * (price - h.get("平均成本", 0)), 2)
+                                updated += 1
+                            else:
+                                failed.append(f"{name}（ticker: `{ticker}`，原因: {err}）")
                         else:
-                            failed.append(name)
-                    else:
-                        failed.append(name)
+                            failed.append(f"{name}（無法從名稱識別 ticker，請在名稱開頭加入股票代號，例如：`MU 美光科技` 或 `6869 長飛`）")
                 save_now()
                 if updated:
                     st.success(f"✅ 成功更新 {updated} 筆！")
                 if failed:
-                    st.warning(f"⚠️ 無法自動識別：{', '.join(failed)}")
-                st.rerun()
+                    for f in failed:
+                        st.warning(f"⚠️ {f}")
         else:
             st.info("安裝 `yfinance` 可啟用自動更新")
 
