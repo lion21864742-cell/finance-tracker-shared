@@ -6,4 +6,3 @@ numpy
 xlsxwriter
 firebase-admin
 requests
-streamlit-cookies-controller
