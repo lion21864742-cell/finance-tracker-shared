@@ -242,23 +242,103 @@ if page_choice == "📊 財務總覽 & 預算監控":
             st.info("💡 尚無支出數據，記帳後自動呈現。")
 
     with budget_col:
-        st.subheader("🎯 Budget Tracker 預算進度條")
-        budget_rows = []
+        st.subheader("🎯 預算使用進度")
         for cat, b_amount in st.session_state.my_budget.items():
             a_amount = actual_spent_map.get(cat, 0.0)
-            remaining = b_amount - a_amount
-            use_rate = (a_amount / b_amount) * 100 if b_amount > 0 else 0.0
+            if b_amount <= 0 and a_amount <= 0:
+                continue
+            use_rate = (a_amount / b_amount * 100) if b_amount > 0 else 100.0
+            use_rate_capped = min(use_rate, 100)
             if use_rate >= 100:
-                status_icon = "🔴 已超支"
+                bar_color = "#E24B4A"
+                status = "🔴 超支"
             elif use_rate >= 80:
-                status_icon = "🟡 預警"
+                bar_color = "#EF9F27"
+                status = "🟡 預警"
             else:
-                status_icon = "🟢 正常"
-            budget_rows.append({
-                "分類": cat, "預算": f"${b_amount:,.1f}", "已使用": f"${a_amount:,.1f}",
-                "剩餘": f"${remaining:,.1f}", "使用率": f"{use_rate:.1f}%", "狀態": status_icon
+                bar_color = "#1D9E75"
+                status = "🟢"
+            label_right = f"${a_amount:,.0f} / ${b_amount:,.0f}"
+            bar_html = (
+                f"<div style='margin-bottom:10px'>"
+                f"<div style='display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px'>"
+                f"<span><b>{cat}</b> {status}</span>"
+                f"<span style='color:gray'>{label_right}</span>"
+                f"</div>"
+                f"<div style='background:#e0e0e0;border-radius:6px;height:10px;overflow:hidden'>"
+                f"<div style='width:{use_rate_capped}%;background:{bar_color};height:100%;border-radius:6px'></div>"
+                f"</div></div>"
+            )
+            st.markdown(bar_html, unsafe_allow_html=True)
+
+    st.markdown("---")
+
+    # ---- 收支趨勢折線圖 ----
+    st.subheader("📈 收支趨勢")
+    if not df_current_logs.empty:
+        df_trend = df_current_logs.copy()
+        df_trend["日期"] = pd.to_datetime(df_trend["日期"], errors="coerce")
+        df_trend = df_trend.dropna(subset=["日期"])
+        is_inc = (df_trend["類型"] == "收入 📥") | (df_trend["分類"] == "收入")
+        df_inc = df_trend[is_inc].groupby("日期")["金額"].sum().reset_index()
+        df_inc["類型"] = "收入"
+        df_exp = df_trend[~is_inc].groupby("日期")["金額"].sum().reset_index()
+        df_exp["類型"] = "支出"
+        df_line = pd.concat([df_inc, df_exp], ignore_index=True)
+        if not df_line.empty:
+            fig_line = px.line(df_line, x="日期", y="金額", color="類型",
+                               color_discrete_map={"收入": "#1D9E75", "支出": "#E24B4A"},
+                               markers=True)
+            fig_line.update_layout(
+                template="plotly_dark",
+                margin=dict(l=10, r=10, t=10, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("💡 數據不足，記帳後自動呈現趨勢圖。")
+    else:
+        st.info("💡 尚無記帳數據。")
+
+    st.markdown("---")
+
+    # ---- 本月 vs 上月支出比較 ----
+    st.subheader("📊 本月 vs 上月支出比較")
+    if not df_current_logs.empty:
+        import calendar as cal
+        now_dt = datetime.now()
+        this_m_start = datetime(now_dt.year, now_dt.month, 1)
+        last_m = now_dt.month - 1 if now_dt.month > 1 else 12
+        last_m_year = now_dt.year if now_dt.month > 1 else now_dt.year - 1
+        last_m_start = datetime(last_m_year, last_m, 1)
+        last_m_end = datetime(last_m_year, last_m, cal.monthrange(last_m_year, last_m)[1], 23, 59, 59)
+        df_cmp = df_current_logs.copy()
+        df_cmp["日期_dt"] = pd.to_datetime(df_cmp["日期"], errors="coerce")
+        is_exp_mask = ~((df_cmp["類型"] == "收入 📥") | (df_cmp["分類"] == "收入"))
+        df_exp_only = df_cmp[is_exp_mask]
+        this_m_data = df_exp_only[df_exp_only["日期_dt"] >= this_m_start].groupby("分類")["金額"].sum()
+        last_m_data = df_exp_only[(df_exp_only["日期_dt"] >= last_m_start) & (df_exp_only["日期_dt"] <= last_m_end)].groupby("分類")["金額"].sum()
+        all_cats = list(set(this_m_data.index.tolist() + last_m_data.index.tolist()))
+        if all_cats:
+            cmp_df = pd.DataFrame({
+                "分類": all_cats,
+                "本月": [this_m_data.get(c, 0) for c in all_cats],
+                "上月": [last_m_data.get(c, 0) for c in all_cats]
             })
-        st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True)
+            cmp_df = cmp_df[(cmp_df["本月"] > 0) | (cmp_df["上月"] > 0)].sort_values("本月", ascending=False)
+            cmp_melt = cmp_df.melt(id_vars="分類", var_name="月份", value_name="金額")
+            fig_bar = px.bar(cmp_melt, x="分類", y="金額", color="月份", barmode="group",
+                             color_discrete_map={"本月": "#378ADD", "上月": "#888780"})
+            fig_bar.update_layout(
+                template="plotly_dark",
+                margin=dict(l=10, r=10, t=10, b=10),
+                legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1)
+            )
+            st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("💡 暫無可比較的支出數據。")
+    else:
+        st.info("💡 尚無記帳數據。")
 
     st.markdown("---")
     total_logs = len(st.session_state.my_logs)
