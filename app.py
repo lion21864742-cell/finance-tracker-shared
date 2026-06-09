@@ -284,7 +284,39 @@ elif page_choice == "📋 歷史收支明細":
         with d_col2:
             custom_end = st.date_input("結束日期", value=date.today(), key="custom_end")
 
-    st.caption(f"目前篩選：**{st.session_state.filter_mode}**")
+    filter_col, export_col = st.columns([3, 1])
+    filter_col.caption(f"目前篩選：**{st.session_state.filter_mode}**")
+
+    # ---- 匯出 Excel ----
+    with export_col:
+        if st.session_state.my_logs:
+            import io
+            export_df = pd.DataFrame(st.session_state.my_logs)
+            # 套用篩選到匯出
+            if st.session_state.get("filter_mode", "全部") != "全部" and not export_df.empty:
+                def parse_date_safe(d):
+                    try:
+                        return datetime.strptime(str(d), "%Y/%m/%d").date()
+                    except:
+                        return None
+                export_df["_date"] = export_df["日期"].apply(parse_date_safe)
+                if st.session_state.filter_mode == "本月":
+                    export_df = export_df[export_df["_date"] >= this_month_start]
+                elif st.session_state.filter_mode == "上月":
+                    export_df = export_df[(export_df["_date"] >= last_month_start) & (export_df["_date"] <= last_month_end)]
+                elif st.session_state.filter_mode == "自訂" and "custom_start" in st.session_state:
+                    export_df = export_df[(export_df["_date"] >= st.session_state.custom_start) & (export_df["_date"] <= st.session_state.custom_end)]
+                export_df = export_df.drop(columns=["_date"], errors="ignore")
+
+            buf = io.BytesIO()
+            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+                export_df.to_excel(writer, index=False, sheet_name="收支明細")
+            buf.seek(0)
+            filename = f"收支明細_{datetime.now().strftime('%Y%m%d')}.xlsx"
+            st.download_button("📥 匯出 Excel", data=buf, file_name=filename,
+                               mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                               use_container_width=True)
+
     st.markdown("---")
 
     # 套用篩選
