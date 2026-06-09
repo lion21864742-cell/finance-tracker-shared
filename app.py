@@ -150,6 +150,7 @@ if st.session_state.uid is None:
             st.session_state.my_budget = data.get("budget", {})
             st.session_state.my_income_categories = data.get("income_categories", [])
             st.session_state.my_logs = data.get("logs", [])
+            st.session_state.my_holdings = data.get("holdings", [])
 
 
 # ==================== 登入/註冊頁面 ====================
