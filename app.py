@@ -1,31 +1,25 @@
 import streamlit as st
 import pandas as pd
 import plotly.express as px
-from datetime import datetime
+from datetime import datetime, date
 import firebase_admin
-from firebase_admin import credentials, firestore, auth as admin_auth
+from firebase_admin import credentials, firestore
 import requests
-import json
-import os
 
 # ==================== Firebase 初始化 ====================
 FIREBASE_API_KEY = "AIzaSyCWAcZjTZ02lc2-ILd3rY-hZa0qmM-F-ik"
-FIREBASE_PROJECT_ID = "finance-tracker-shared"
 
-# 初始化 Firebase Admin SDK（用 Streamlit secrets 或 環境變數）
 if not firebase_admin._apps:
     try:
-        # 優先從 Streamlit secrets 讀取（部署用）
         sa = dict(st.secrets["firebase_service_account"])
         cred = credentials.Certificate(sa)
     except Exception:
-        # 本地開發：放 serviceAccountKey.json 在同目錄
         cred = credentials.Certificate("serviceAccountKey.json")
     firebase_admin.initialize_app(cred)
 
 db = firestore.client()
 
-# ==================== 登入/註冊 Helper ====================
+# ==================== Auth Helper ====================
 def sign_in(email, password):
     url = f"https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key={FIREBASE_API_KEY}"
     r = requests.post(url, json={"email": email, "password": password, "returnSecureToken": True})
@@ -36,7 +30,7 @@ def sign_up(email, password):
     r = requests.post(url, json={"email": email, "password": password, "returnSecureToken": True})
     return r.json()
 
-# ==================== Firestore 讀寫 Helper ====================
+# ==================== Firestore Helper ====================
 def load_user_data(uid):
     doc = db.collection("users").document(uid).get()
     if doc.exists:
@@ -68,7 +62,7 @@ def get_default_data():
 # ==================== 網頁配置 ====================
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
-# ==================== 登入狀態管理 ====================
+# ==================== 登入狀態 ====================
 if "uid" not in st.session_state:
     st.session_state.uid = None
 if "user_email" not in st.session_state:
@@ -78,7 +72,6 @@ if "user_email" not in st.session_state:
 if st.session_state.uid is None:
     st.title("💎 Cloud Finance Master Plan 2026")
     st.markdown("---")
-
     tab_login, tab_signup = st.tabs(["🔑 登入", "📝 註冊新帳號"])
 
     with tab_login:
@@ -91,7 +84,6 @@ if st.session_state.uid is None:
                 if "idToken" in result:
                     st.session_state.uid = result["localId"]
                     st.session_state.user_email = login_email
-                    # 載入或初始化用戶數據
                     data = load_user_data(st.session_state.uid)
                     if data is None:
                         data = get_default_data()
@@ -140,7 +132,7 @@ if st.session_state.uid is None:
                     st.error(f"❌ {err}")
     st.stop()
 
-# ==================== 已登入：存檔 Helper ====================
+# ==================== 存檔 Helper ====================
 def save_now():
     save_user_data(st.session_state.uid, {
         "assets": st.session_state.my_assets,
@@ -176,7 +168,6 @@ savings_rate = (expected_savings / total_actual_income * 100) if total_actual_in
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
 st.caption("🚀 雲端收支全功能分享版 — 支援「收入/支出雙引擎」與「儲蓄率動態追蹤看板」")
 
-# 右上角顯示登入用戶 + 登出
 col_title, col_logout = st.columns([4, 1])
 with col_logout:
     st.caption(f"👤 {st.session_state.user_email}")
@@ -200,6 +191,7 @@ st.markdown("---")
 st.sidebar.title("Menu 功能選單")
 page_choice = st.sidebar.radio("切換功能頁面", [
     "📊 財務總覽 & 預算監控",
+    "📋 歷史收支明細",
     "💸 每日單筆記帳 (收/支)",
     "📤 批量上載 Excel/CSV 檔案",
     "⚙️ 自訂您的資產/預算初始值"
@@ -247,18 +239,93 @@ if page_choice == "📊 財務總覽 & 預算監控":
         st.dataframe(pd.DataFrame(budget_rows), use_container_width=True, hide_index=True)
 
     st.markdown("---")
+    total_logs = len(st.session_state.my_logs)
+    st.info(f"📋 共有 **{total_logs}** 筆記錄，詳細記錄請前往左側「📋 歷史收支明細」頁面查看及編輯。")
+
+# ==================== 頁面 2: 歷史收支明細 ====================
+elif page_choice == "📋 歷史收支明細":
     st.subheader("📋 歷史收支明細")
 
-    if df_current_logs.empty:
-        st.info("尚無記帳記錄。")
+    if "editing_index" not in st.session_state:
+        st.session_state.editing_index = None
+
+    # ---- 日期篩選 ----
+    now = datetime.now()
+    this_month_start = date(now.year, now.month, 1)
+    last_month = now.month - 1 if now.month > 1 else 12
+    last_month_year = now.year if now.month > 1 else now.year - 1
+    last_month_start = date(last_month_year, last_month, 1)
+    import calendar
+    last_month_end = date(last_month_year, last_month,
+                          calendar.monthrange(last_month_year, last_month)[1])
+
+    f_col1, f_col2, f_col3, f_col4 = st.columns(4)
+    with f_col1:
+        if st.button("本月", use_container_width=True):
+            st.session_state.filter_mode = "本月"
+    with f_col2:
+        if st.button("上月", use_container_width=True):
+            st.session_state.filter_mode = "上月"
+    with f_col3:
+        if st.button("全部", use_container_width=True):
+            st.session_state.filter_mode = "全部"
+    with f_col4:
+        if st.button("自訂日期", use_container_width=True):
+            st.session_state.filter_mode = "自訂"
+
+    if "filter_mode" not in st.session_state:
+        st.session_state.filter_mode = "全部"
+
+    # 自訂日期範圍
+    if st.session_state.filter_mode == "自訂":
+        d_col1, d_col2 = st.columns(2)
+        with d_col1:
+            custom_start = st.date_input("開始日期", value=this_month_start, key="custom_start")
+        with d_col2:
+            custom_end = st.date_input("結束日期", value=date.today(), key="custom_end")
+
+    st.caption(f"目前篩選：**{st.session_state.filter_mode}**")
+    st.markdown("---")
+
+    # 套用篩選
+    logs = st.session_state.my_logs
+    filtered_indices = []
+    for i, log in enumerate(logs):
+        try:
+            log_date = datetime.strptime(str(log.get("日期", "")), "%Y/%m/%d").date()
+        except:
+            log_date = None
+
+        if st.session_state.filter_mode == "全部" or log_date is None:
+            filtered_indices.append(i)
+        elif st.session_state.filter_mode == "本月":
+            if log_date >= this_month_start:
+                filtered_indices.append(i)
+        elif st.session_state.filter_mode == "上月":
+            if last_month_start <= log_date <= last_month_end:
+                filtered_indices.append(i)
+        elif st.session_state.filter_mode == "自訂":
+            if custom_start <= log_date <= custom_end:
+                filtered_indices.append(i)
+
+    if not filtered_indices:
+        st.info("此時間範圍內沒有記錄。")
     else:
-        # 初始化編輯狀態
-        if "editing_index" not in st.session_state:
-            st.session_state.editing_index = None
+        st.caption(f"共 {len(filtered_indices)} 筆記錄")
 
-        logs = st.session_state.my_logs
+        # 表頭
+        h1, h2, h3, h4, h5, h6, h7 = st.columns([1.2, 1.2, 1, 1.5, 1, 0.5, 0.5])
+        h1.markdown("**日期**")
+        h2.markdown("**類型**")
+        h3.markdown("**分類**")
+        h4.markdown("**項目**")
+        h5.markdown("**金額**")
+        h6.markdown("**編輯**")
+        h7.markdown("**刪除**")
+        st.markdown("---")
 
-        for i, log in enumerate(logs):
+        for i in filtered_indices:
+            log = logs[i]
             col_date, col_type, col_cat, col_item, col_amt, col_edit, col_del = st.columns([1.2, 1.2, 1, 1.5, 1, 0.5, 0.5])
             col_date.write(log.get("日期", ""))
             col_type.write(log.get("類型", ""))
@@ -275,7 +342,7 @@ if page_choice == "📊 財務總覽 & 預算監控":
                 st.success("✅ 已刪除")
                 st.rerun()
 
-            # 展開編輯表單
+            # 編輯表單
             if st.session_state.editing_index == i:
                 with st.form(key=f"edit_form_{i}"):
                     st.markdown(f"**編輯第 {i+1} 筆記錄**")
@@ -292,30 +359,26 @@ if page_choice == "📊 財務總覽 & 預算監控":
                         new_amt = st.number_input("金額", value=float(log.get("金額", 0)), min_value=0.0, key=f"eamt_{i}")
                         new_acc = st.text_input("帳戶/備註", value=log.get("帳戶/備註", ""), key=f"eacc_{i}")
 
-                    save_btn, cancel_btn = st.columns(2)
-                    with save_btn:
+                    sb, cb = st.columns(2)
+                    with sb:
                         if st.form_submit_button("💾 儲存修改", use_container_width=True):
                             st.session_state.my_logs[i] = {
-                                "日期": new_date,
-                                "類型": new_type,
-                                "分類": new_cat,
-                                "子分類": new_subcat,
-                                "項目": new_item,
-                                "金額": float(new_amt),
-                                "帳戶/備註": new_acc
+                                "日期": new_date, "類型": new_type, "分類": new_cat,
+                                "子分類": new_subcat, "項目": new_item,
+                                "金額": float(new_amt), "帳戶/備註": new_acc
                             }
                             save_now()
                             st.session_state.editing_index = None
                             st.success("✅ 已儲存")
                             st.rerun()
-                    with cancel_btn:
+                    with cb:
                         if st.form_submit_button("取消", use_container_width=True):
                             st.session_state.editing_index = None
                             st.rerun()
 
             st.divider()
 
-# ==================== 頁面 2: 單筆記帳 ====================
+# ==================== 頁面 3: 單筆記帳 ====================
 elif page_choice == "💸 每日單筆記帳 (收/支)":
     st.subheader("📥 填寫日常單筆收支")
 
@@ -358,11 +421,11 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
                 "金額": float(in_amount),
                 "帳戶/備註": in_acc
             })
-            save_now()  # 💾 即時存到 Firebase
+            save_now()
             st.success(f"✅ 已記入並儲存：{in_title} ${in_amount}")
             st.rerun()
 
-# ==================== 頁面 3: 批量上載 ====================
+# ==================== 頁面 4: 批量上載 ====================
 elif page_choice == "📤 批量上載 Excel/CSV 檔案":
     st.subheader("📤 批量匯入現有的記帳明細表格")
     st.info("💡 請確保 Excel/CSV 標題包含：【日期】、【分類】、【項目】、【金額】")
@@ -413,7 +476,6 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                         col_mapping[col] = "帳戶/備註"
 
                 df_imported = df_imported.rename(columns=col_mapping)
-
                 required = ["日期", "分類", "項目", "金額"]
                 if not all(x in df_imported.columns for x in required):
                     st.error("❌ 格式不符！必須包含：『日期』,『分類』,『項目』,『金額』")
@@ -442,14 +504,14 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
                                 "金額": float(row.get("金額", 0.0)),
                                 "帳戶/備註": str(row.get("帳戶/備註", "Excel匯入"))
                             })
-                        save_now()  # 💾 存到 Firebase
+                        save_now()
                         st.success("🚀 已成功合併並儲存到雲端！")
                         st.rerun()
 
         except Exception as e:
             st.error(f"❌ 讀取失敗，原因：{e}")
 
-# ==================== 頁面 4: 設定 ====================
+# ==================== 頁面 5: 設定 ====================
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.subheader("⚙️ 個人化財務設定後台")
 
