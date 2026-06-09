@@ -42,7 +42,7 @@ def save_user_data(uid, data):
 
 def get_default_data():
     return {
-        "assets": {"現金帳戶 🟢": 0.0, "銀行儲蓄 🏦": 0.0},
+        "assets": {"現金帳戶 🟢": 0.0, "銀行儲蓄 🏦": 0.0, "投資帳戶 📈": 0.0},
         "liabilities": {"信用卡欠款 🔴": 0.0},
         "budget": {
             "飲食": 0.0, "租金": 0.0, "交通": 0.0, "化妝品": 0.0,
@@ -110,6 +110,7 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data.get("budget", {})
                     st.session_state.my_income_categories = data.get("income_categories", [])
                     st.session_state.my_logs = data.get("logs", [])
+                    st.session_state.my_holdings = data.get("holdings", [])
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
@@ -144,6 +145,7 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data["budget"]
                     st.session_state.my_income_categories = data["income_categories"]
                     st.session_state.my_logs = data["logs"]
+                    st.session_state.my_holdings = data.get("holdings", [])
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
@@ -160,7 +162,8 @@ def save_now():
         "liabilities": st.session_state.my_liabilities,
         "budget": st.session_state.my_budget,
         "income_categories": st.session_state.my_income_categories,
-        "logs": st.session_state.my_logs
+        "logs": st.session_state.my_logs,
+        "holdings": st.session_state.get("my_holdings", [])
     })
 
 # ==================== 核心財務計算 ====================
@@ -693,15 +696,33 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
             st.warning("⚠️ 輸入無效或分類已存在！")
 
     st.markdown("---")
+
+    # 初始化持倉記錄
+    if "my_holdings" not in st.session_state:
+        st.session_state.my_holdings = []
+
     col_s1, col_s2 = st.columns(2)
     with col_s1:
-        st.write("### 🟢 資產初始餘額")
+        st.write("### 🟢 資產帳戶餘額")
         for k, v in list(st.session_state.my_assets.items()):
             new_val = st.number_input(f"【{k}】", value=float(v), key=f"asset_input_{k}")
             if new_val != v:
                 st.session_state.my_assets[k] = new_val
                 save_now()
 
+        # 新增資產帳戶
+        st.markdown("")
+        new_asset_name = st.text_input("新增資產帳戶名稱", placeholder="例如：投資帳戶 📈", key="new_asset_name")
+        if st.button("➕ 新增帳戶"):
+            if new_asset_name.strip() and new_asset_name.strip() not in st.session_state.my_assets:
+                st.session_state.my_assets[new_asset_name.strip()] = 0.0
+                save_now()
+                st.success(f"✅ 已新增：{new_asset_name.strip()}")
+                st.rerun()
+            else:
+                st.warning("⚠️ 名稱無效或已存在！")
+
+        st.markdown("---")
         st.write("### 🔴 負債初始欠款")
         for k, v in list(st.session_state.my_liabilities.items()):
             new_val = st.number_input(f"【{k}】", value=float(v), key=f"lia_input_{k}")
@@ -717,3 +738,64 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
             if new_budget != b_val:
                 st.session_state.my_budget[cat] = new_budget
                 save_now()
+
+    st.markdown("---")
+    st.write("### 📈 投資持倉記錄")
+    st.caption("記錄你目前持有的股票/基金/加密貨幣等")
+
+    # 新增持倉
+    with st.form("add_holding_form", clear_on_submit=True):
+        h1, h2, h3, h4 = st.columns(4)
+        with h1:
+            h_name = st.text_input("名稱", placeholder="例如：蘋果 AAPL")
+        with h2:
+            h_qty = st.number_input("數量/單位", min_value=0.0, step=0.01)
+        with h3:
+            h_price = st.number_input("現價", min_value=0.0, step=0.01)
+        with h4:
+            h_cost = st.number_input("平均成本", min_value=0.0, step=0.01)
+        if st.form_submit_button("➕ 加入持倉", use_container_width=True):
+            if h_name.strip():
+                st.session_state.my_holdings.append({
+                    "名稱": h_name.strip(),
+                    "數量": h_qty,
+                    "現價": h_price,
+                    "平均成本": h_cost,
+                    "市值": round(h_qty * h_price, 2),
+                    "盈虧": round(h_qty * (h_price - h_cost), 2)
+                })
+                save_now()
+                st.rerun()
+
+    # 顯示持倉列表
+    if st.session_state.my_holdings:
+        total_market_val = sum(h.get("市值", 0) for h in st.session_state.my_holdings)
+        total_pnl = sum(h.get("盈虧", 0) for h in st.session_state.my_holdings)
+        pnl_color = "🟢" if total_pnl >= 0 else "🔴"
+
+        m1, m2 = st.columns(2)
+        m1.metric("總市值", f"${total_market_val:,.2f}")
+        m2.metric("總盈虧", f"${total_pnl:,.2f}", delta=f"{pnl_color} {'盈利' if total_pnl >= 0 else '虧損'}")
+
+        st.markdown("")
+        hh1, hh2, hh3, hh4, hh5, hh6, hh7 = st.columns([2, 1, 1, 1, 1, 1, 0.6])
+        hh1.markdown("**名稱**"); hh2.markdown("**數量**"); hh3.markdown("**現價**")
+        hh4.markdown("**成本**"); hh5.markdown("**市值**"); hh6.markdown("**盈虧**"); hh7.markdown("**刪**")
+        st.markdown("---")
+
+        for i, h in enumerate(st.session_state.my_holdings):
+            c1, c2, c3, c4, c5, c6, c7 = st.columns([2, 1, 1, 1, 1, 1, 0.6])
+            pnl = h.get("盈虧", 0)
+            c1.write(h.get("名稱", ""))
+            c2.write(f'{h.get("數量", 0):,.2f}')
+            c3.write(f'${h.get("現價", 0):,.2f}')
+            c4.write(f'${h.get("平均成本", 0):,.2f}')
+            c5.write(f'${h.get("市值", 0):,.2f}')
+            c6.markdown(f'<span style="color:{"#1D9E75" if pnl >= 0 else "#E24B4A"}">${pnl:,.2f}</span>', unsafe_allow_html=True)
+            if c7.button("🗑️", key=f"del_hold_{i}"):
+                st.session_state.my_holdings.pop(i)
+                save_now()
+                st.rerun()
+            st.divider()
+    else:
+        st.info("💡 尚無持倉記錄，填寫上方表單加入。")
