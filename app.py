@@ -189,12 +189,16 @@ p, span, div, label {
 .stNumberInput input,
 .stSelectbox select,
 textarea {
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: rgba(15, 25, 40, 0.8) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
     border-radius: 10px !important;
     color: #f7fafc !important;
     font-family: 'Inter', sans-serif !important;
     transition: border-color 0.2s !important;
+}
+.stTextInput input::placeholder,
+.stNumberInput input::placeholder {
+    color: #4a5568 !important;
 }
 .stTextInput input:focus,
 .stNumberInput input:focus {
@@ -202,10 +206,22 @@ textarea {
     box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.15) !important;
 }
 .stSelectbox > div > div {
-    background: rgba(255,255,255,0.05) !important;
-    border: 1px solid rgba(255,255,255,0.1) !important;
+    background: rgba(15, 25, 40, 0.8) !important;
+    border: 1px solid rgba(255,255,255,0.15) !important;
     border-radius: 10px !important;
     color: #f7fafc !important;
+}
+/* number input 內部數字 */
+[data-testid="stNumberInput"] input {
+    color: #f7fafc !important;
+    background: rgba(15, 25, 40, 0.8) !important;
+}
+/* label 文字 */
+[data-testid="stWidgetLabel"] p,
+.stTextInput label, .stNumberInput label,
+.stSelectbox label, .stRadio label {
+    color: #a0aec0 !important;
+    font-size: 0.85rem !important;
 }
 
 /* ══════════════════════════════════════
