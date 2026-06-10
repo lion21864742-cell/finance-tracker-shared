@@ -1039,9 +1039,9 @@ elif page_choice == "📈 投資持倉記錄":
         hkd_holdings = [(i, h) for i, h in enumerate(st.session_state.my_holdings) if h.get("幣別", "USD") == "HKD"]
 
         def holdings_summary(holdings_list):
-            mv = sum(h.get("市值", 0) for _, h in holdings_list)
-            pnl = sum(h.get("盈虧", 0) for _, h in holdings_list)
-            cost = sum(h.get("數量", 0) * h.get("平均成本", 0) for _, h in holdings_list)
+            mv = sum(float(h.get("市值") or 0) for _, h in holdings_list)
+            pnl = sum(float(h.get("盈虧") or 0) for _, h in holdings_list)
+            cost = sum(float(h.get("數量") or 0) * float(h.get("平均成本") or 0) for _, h in holdings_list)
             return mv, pnl, cost
 
         def render_holdings_group(holdings_list, currency_symbol, currency_label):
@@ -1081,16 +1081,18 @@ elif page_choice == "📈 投資持倉記錄":
 
             for i, h in holdings_list:
                 c1, c2, c3, c4, c5, c6, c7 = st.columns([2.2, 1, 1, 1, 1.2, 0.6, 0.6])
-                pnl_h = h.get("盈虧", 0)
-                qty = h.get("數量", 0)
-                h_cost = h.get("平均成本", 0)
+                pnl_h = float(h.get("盈虧") or 0)
+                qty = float(h.get("數量") or 0)
+                h_cost = float(h.get("平均成本") or 0)
+                h_price = float(h.get("現價") or 0)
+                h_mv = float(h.get("市值") or 0)
                 pnl_p = (pnl_h / (qty * h_cost) * 100) if (qty * h_cost) > 0 else 0.0
                 clr = "#1D9E75" if pnl_h >= 0 else "#E24B4A"
                 sgn = "+" if pnl_h >= 0 else ""
 
                 c1.write(h.get("名稱", ""))
                 c2.write(f'{qty:,.2f}')
-                c3.write(f'{currency_symbol}{h.get("現價", 0):,.2f}')
+                c3.write(f'{currency_symbol}{h_price:,.2f}')
                 c4.write(f'{currency_symbol}{h_cost:,.2f}')
                 c5.markdown(
                     f'<span style="color:{clr};font-weight:600">'
