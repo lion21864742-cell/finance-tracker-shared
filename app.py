@@ -317,16 +317,24 @@ def fetch_price(ticker: str) -> tuple:
     if not YFINANCE_AVAILABLE:
         return None, "yfinance 未安裝"
     try:
+        import math
         t = yf.Ticker(ticker.strip())
         hist = t.history(period="5d")
         if not hist.empty:
-            return round(float(hist["Close"].iloc[-1]), 4), None
+            # 過濾 NaN，取最後一個有效收市價
+            closes = hist["Close"].dropna()
+            if not closes.empty:
+                price = float(closes.iloc[-1])
+                if not math.isnan(price) and price > 0:
+                    return round(price, 4), None
         # fallback
         info = t.fast_info
         price = getattr(info, "last_price", None)
-        if price:
-            return round(float(price), 4), None
-        return None, "無法取得價格（可能係非交易時段或 ticker 錯誤）"
+        if price is not None:
+            price = float(price)
+            if not math.isnan(price) and price > 0:
+                return round(price, 4), None
+        return None, "無法取得價格（ticker 可能錯誤或非交易時段）"
     except Exception as e:
         return None, str(e)
 
@@ -909,9 +917,11 @@ elif page_choice == "📈 投資持倉記錄":
                         if ticker:
                             price, err = fetch_price(ticker)
                             if price:
+                                qty = float(h.get("數量") or 0)
+                                cost = float(h.get("平均成本") or 0)
                                 h["現價"] = price
-                                h["市值"] = round(h.get("數量", 0) * price, 2)
-                                h["盈虧"] = round(h.get("數量", 0) * (price - h.get("平均成本", 0)), 2)
+                                h["市值"] = round(qty * price, 2)
+                                h["盈虧"] = round(qty * (price - cost), 2)
                                 updated += 1
                             else:
                                 failed.append(f"{name}（ticker: `{ticker}`，原因: {err}）")
