@@ -69,46 +69,229 @@ def get_default_data():
 # ==================== 網頁配置 ====================
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
-# ==================== 手機版 CSS ====================
+# ==================== Fintech 主題 CSS ====================
 st.markdown("""
 <style>
-/* ---- 手機響應式通用 ---- */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+
+/* ══════════════════════════════════════
+   全站底色 & 字體
+══════════════════════════════════════ */
+html, body, [data-testid="stAppViewContainer"] {
+    background: linear-gradient(135deg, #0d1117 0%, #0f1923 50%, #0d1f2d 100%) !important;
+    font-family: 'Inter', sans-serif !important;
+}
+[data-testid="stAppViewContainer"] > .main {
+    background: transparent !important;
+}
+
+/* ══════════════════════════════════════
+   側邊欄
+══════════════════════════════════════ */
+[data-testid="stSidebar"] {
+    background: linear-gradient(180deg, #0f1923 0%, #111d2b 100%) !important;
+    border-right: 1px solid rgba(0, 212, 170, 0.15) !important;
+}
+[data-testid="stSidebar"] .stRadio label {
+    color: #a0aec0 !important;
+    font-size: 0.9rem !important;
+    padding: 4px 0 !important;
+    transition: color 0.2s;
+}
+[data-testid="stSidebar"] .stRadio label:hover { color: #00d4aa !important; }
+[data-testid="stSidebar"] [data-testid="stMarkdownContainer"] p {
+    color: #718096 !important;
+    font-size: 0.8rem !important;
+}
+
+/* ══════════════════════════════════════
+   標題
+══════════════════════════════════════ */
+h1 {
+    background: linear-gradient(90deg, #00d4aa, #3b82f6) !important;
+    -webkit-background-clip: text !important;
+    -webkit-text-fill-color: transparent !important;
+    font-weight: 700 !important;
+    letter-spacing: -0.5px !important;
+}
+h2, h3 {
+    color: #e2e8f0 !important;
+    font-weight: 600 !important;
+    letter-spacing: -0.3px !important;
+}
+p, span, div, label {
+    color: #cbd5e0 !important;
+}
+
+/* ══════════════════════════════════════
+   Metric 卡片
+══════════════════════════════════════ */
+[data-testid="stMetric"] {
+    background: linear-gradient(135deg, rgba(255,255,255,0.04) 0%, rgba(255,255,255,0.02) 100%) !important;
+    border: 1px solid rgba(0, 212, 170, 0.2) !important;
+    border-radius: 16px !important;
+    padding: 1.2rem 1.4rem !important;
+    backdrop-filter: blur(10px) !important;
+    transition: border-color 0.3s, transform 0.2s !important;
+}
+[data-testid="stMetric"]:hover {
+    border-color: rgba(0, 212, 170, 0.5) !important;
+    transform: translateY(-2px) !important;
+}
+[data-testid="stMetricValue"] {
+    color: #f7fafc !important;
+    font-weight: 700 !important;
+    font-size: 1.5rem !important;
+}
+[data-testid="stMetricLabel"] {
+    color: #718096 !important;
+    font-size: 0.78rem !important;
+    text-transform: uppercase !important;
+    letter-spacing: 0.05em !important;
+}
+[data-testid="stMetricDelta"] { font-size: 0.85rem !important; }
+
+/* ══════════════════════════════════════
+   按鈕
+══════════════════════════════════════ */
+.stButton > button {
+    background: linear-gradient(135deg, #00d4aa, #0ea5e9) !important;
+    color: #0d1117 !important;
+    font-weight: 600 !important;
+    font-size: 0.88rem !important;
+    border: none !important;
+    border-radius: 10px !important;
+    padding: 0.55rem 1.2rem !important;
+    transition: opacity 0.2s, transform 0.15s, box-shadow 0.2s !important;
+    box-shadow: 0 4px 15px rgba(0, 212, 170, 0.25) !important;
+}
+.stButton > button:hover {
+    opacity: 0.88 !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 6px 20px rgba(0, 212, 170, 0.4) !important;
+}
+.stButton > button[kind="secondary"] {
+    background: rgba(255,255,255,0.06) !important;
+    color: #a0aec0 !important;
+    box-shadow: none !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+}
+/* 危險按鈕（清空記錄） */
+.stButton > button[kind="primary"] {
+    background: linear-gradient(135deg, #e53e3e, #c05621) !important;
+    box-shadow: 0 4px 15px rgba(229, 62, 62, 0.3) !important;
+}
+
+/* ══════════════════════════════════════
+   輸入框
+══════════════════════════════════════ */
+.stTextInput input,
+.stNumberInput input,
+.stSelectbox select,
+textarea {
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 10px !important;
+    color: #f7fafc !important;
+    font-family: 'Inter', sans-serif !important;
+    transition: border-color 0.2s !important;
+}
+.stTextInput input:focus,
+.stNumberInput input:focus {
+    border-color: #00d4aa !important;
+    box-shadow: 0 0 0 3px rgba(0, 212, 170, 0.15) !important;
+}
+.stSelectbox > div > div {
+    background: rgba(255,255,255,0.05) !important;
+    border: 1px solid rgba(255,255,255,0.1) !important;
+    border-radius: 10px !important;
+    color: #f7fafc !important;
+}
+
+/* ══════════════════════════════════════
+   Tab
+══════════════════════════════════════ */
+.stTabs [data-baseweb="tab-list"] {
+    background: rgba(255,255,255,0.03) !important;
+    border-radius: 12px !important;
+    padding: 4px !important;
+    gap: 4px !important;
+    border-bottom: none !important;
+}
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px !important;
+    color: #718096 !important;
+    font-weight: 500 !important;
+    padding: 0.5rem 1.2rem !important;
+}
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(135deg, rgba(0,212,170,0.2), rgba(59,130,246,0.2)) !important;
+    color: #00d4aa !important;
+}
+
+/* ══════════════════════════════════════
+   表格 / Dataframe
+══════════════════════════════════════ */
+[data-testid="stDataFrame"] {
+    border: 1px solid rgba(0, 212, 170, 0.15) !important;
+    border-radius: 12px !important;
+    overflow: hidden !important;
+}
+
+/* ══════════════════════════════════════
+   Info / Success / Warning box
+══════════════════════════════════════ */
+[data-testid="stAlert"] {
+    border-radius: 12px !important;
+    border-left-width: 4px !important;
+    backdrop-filter: blur(8px) !important;
+}
+
+/* ══════════════════════════════════════
+   Divider
+══════════════════════════════════════ */
+hr {
+    border: none !important;
+    border-top: 1px solid rgba(255,255,255,0.07) !important;
+    margin: 1rem 0 !important;
+}
+
+/* ══════════════════════════════════════
+   Form
+══════════════════════════════════════ */
+[data-testid="stForm"] {
+    background: rgba(255,255,255,0.02) !important;
+    border: 1px solid rgba(255,255,255,0.07) !important;
+    border-radius: 16px !important;
+    padding: 1rem !important;
+}
+
+/* ══════════════════════════════════════
+   Caption / small text
+══════════════════════════════════════ */
+[data-testid="stCaptionContainer"] p {
+    color: #4a5568 !important;
+    font-size: 0.8rem !important;
+}
+
+/* ══════════════════════════════════════
+   手機響應式
+══════════════════════════════════════ */
 @media (max-width: 768px) {
-    /* 縮小主標題 */
     h1 { font-size: 1.3rem !important; }
-    h2, h3 { font-size: 1.1rem !important; }
-
-    /* Metric 卡片字體 */
+    h2, h3 { font-size: 1.05rem !important; }
     [data-testid="stMetricValue"] { font-size: 1.1rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.75rem !important; }
-
-    /* 按鈕加高、加大字 */
-    .stButton > button {
-        min-height: 2.6rem !important;
-        font-size: 0.95rem !important;
-    }
-
-    /* 輸入框加大 */
-    .stTextInput input, .stNumberInput input, .stSelectbox select {
+    [data-testid="stMetricLabel"] { font-size: 0.7rem !important; }
+    .stButton > button { min-height: 2.6rem !important; font-size: 0.9rem !important; }
+    .stTextInput input, .stNumberInput input {
         font-size: 1rem !important;
         min-height: 2.4rem !important;
     }
-
-    /* 側邊欄收合後的主區域全寬 */
     .main .block-container {
         padding-left: 0.7rem !important;
         padding-right: 0.7rem !important;
     }
-
-    /* 表格文字縮小 */
-    .stDataFrame, .stTable { font-size: 0.78rem !important; }
-
-    /* divider margin */
-    hr { margin: 0.5rem 0 !important; }
 }
-
-/* ---- 桌面版 Metric 卡片微美化 ---- */
-[data-testid="stMetricValue"] { font-weight: 700; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -262,7 +445,16 @@ def save_now():
 # ==================== 核心財務計算 ====================
 total_assets = sum(st.session_state.my_assets.values())
 total_liabilities = sum(st.session_state.my_liabilities.values())
-net_worth = total_assets - total_liabilities
+
+# 持倉市值計入淨身家（HKD 按匯率換算，預設 7.80）
+_holdings = st.session_state.get("my_holdings", [])
+_fx = 7.80  # USD→HKD，與持倉頁同步
+_holdings_usd_mv = sum(h.get("市值", 0) for h in _holdings if h.get("幣別", "USD") == "USD")
+_holdings_hkd_mv = sum(h.get("市值", 0) for h in _holdings if h.get("幣別", "USD") == "HKD")
+# 換算成主幣別（跟 assets/liabilities 同幣，假設 HKD 為主）
+holdings_total_value = _holdings_usd_mv * _fx + _holdings_hkd_mv
+
+net_worth = total_assets - total_liabilities + holdings_total_value
 
 df_current_logs = pd.DataFrame(st.session_state.my_logs)
 total_actual_income = 0.0
@@ -302,7 +494,24 @@ m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 m_col1.metric("💰 本月總收入", f"${total_actual_income:,.2f}")
 m_col2.metric("💸 本月總支出", f"${total_actual_expense:,.2f}")
 m_col3.metric("📈 預計儲蓄", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
-m_col4.metric("👑 當前淨身家", f"${net_worth:,.2f}")
+_nw_delta = f"含持倉 HK${holdings_total_value:,.0f}" if holdings_total_value > 0 else None
+m_col4.metric("👑 當前淨身家", f"HK${net_worth:,.2f}", delta=_nw_delta)
+
+st.markdown("")
+
+m2_col1, m2_col2, m2_col3, m2_col4 = st.columns(4)
+m2_col1.metric("🏦 總資產", f"HK${total_assets:,.2f}")
+m2_col2.metric("💳 總負債", f"HK${total_liabilities:,.2f}",
+               delta=f"-{(total_liabilities/total_assets*100):.1f}% 負債比" if total_assets > 0 else None,
+               delta_color="inverse")
+m2_col3.metric("📈 持倉市值", f"HK${holdings_total_value:,.2f}",
+               delta=f"USD ${_holdings_usd_mv:,.0f} + HKD ${_holdings_hkd_mv:,.0f}" if _holdings else None,
+               delta_color="off")
+_net_pnl = sum(h.get("盈虧", 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
+_net_pnl_sign = "+" if _net_pnl >= 0 else ""
+m2_col4.metric("💹 持倉總盈虧", f"HK${_net_pnl:,.2f}",
+               delta=f"{_net_pnl_sign}{_net_pnl:,.0f}",
+               delta_color="normal")
 st.markdown("---")
 
 # ==================== 側邊欄 ====================
