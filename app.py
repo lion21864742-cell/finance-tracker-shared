@@ -465,9 +465,8 @@ total_liabilities = sum(st.session_state.my_liabilities.values())
 # 持倉市值計入淨身家（HKD 按匯率換算，預設 7.80）
 _holdings = st.session_state.get("my_holdings", [])
 _fx = 7.80  # USD→HKD，與持倉頁同步
-_holdings_usd_mv = sum(h.get("市值", 0) for h in _holdings if h.get("幣別", "USD") == "USD")
-_holdings_hkd_mv = sum(h.get("市值", 0) for h in _holdings if h.get("幣別", "USD") == "HKD")
-# 換算成主幣別（跟 assets/liabilities 同幣，假設 HKD 為主）
+_holdings_usd_mv = sum(float(h.get("市值") or 0) for h in _holdings if h.get("幣別", "USD") == "USD")
+_holdings_hkd_mv = sum(float(h.get("市值") or 0) for h in _holdings if h.get("幣別", "USD") == "HKD")
 holdings_total_value = _holdings_usd_mv * _fx + _holdings_hkd_mv
 
 net_worth = total_assets - total_liabilities + holdings_total_value
@@ -523,7 +522,7 @@ m2_col2.metric("💳 總負債", f"HK${total_liabilities:,.2f}",
 m2_col3.metric("📈 持倉市值", f"HK${holdings_total_value:,.2f}",
                delta=f"USD ${_holdings_usd_mv:,.0f} + HKD ${_holdings_hkd_mv:,.0f}" if _holdings else None,
                delta_color="off")
-_net_pnl = sum(h.get("盈虧", 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
+_net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
 _net_pnl_sign = "+" if _net_pnl >= 0 else ""
 m2_col4.metric("💹 持倉總盈虧", f"HK${_net_pnl:,.2f}",
                delta=f"{_net_pnl_sign}{_net_pnl:,.0f}",
