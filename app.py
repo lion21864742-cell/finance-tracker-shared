@@ -940,76 +940,7 @@ elif page_choice == "📈 投資持倉記錄":
         else:
             st.info("安裝 `yfinance` 可啟用自動更新")
 
-    # ---- 總持倉總覽 ----
-    if st.session_state.my_holdings:
-        st.markdown("---")
-        st.markdown("#### 🌐 總持倉總覽")
-
-        usd_h = [h for h in st.session_state.my_holdings if h.get("幣別", "USD") == "USD"]
-        hkd_h = [h for h in st.session_state.my_holdings if h.get("幣別", "USD") == "HKD"]
-
-        usd_mv   = sum(h.get("市值", 0) for h in usd_h)
-        usd_pnl  = sum(h.get("盈虧", 0) for h in usd_h)
-        usd_cost = sum(h.get("數量", 0) * h.get("平均成本", 0) for h in usd_h)
-
-        hkd_mv   = sum(h.get("市值", 0) for h in hkd_h)
-        hkd_pnl  = sum(h.get("盈虧", 0) for h in hkd_h)
-        hkd_cost = sum(h.get("數量", 0) * h.get("平均成本", 0) for h in hkd_h)
-
-        # 匯率設定
-        fx_col1, fx_col2 = st.columns([2, 1])
-        with fx_col1:
-            display_ccy = st.radio("顯示幣別", ["HKD 港元", "USD 美元"], horizontal=True, key="portfolio_ccy")
-        with fx_col2:
-            usd_to_hkd = st.number_input("USD → HKD 匯率", value=7.80, min_value=1.0, step=0.01, key="fx_rate")
-
-        hkd_to_usd = 1.0 / usd_to_hkd
-
-        if display_ccy == "HKD 港元":
-            sym = "HK$"
-            total_mv   = hkd_mv   + usd_mv   * usd_to_hkd
-            total_cost = hkd_cost + usd_cost * usd_to_hkd
-            total_pnl  = hkd_pnl  + usd_pnl  * usd_to_hkd
-            note_usd = f"（USD 部分以 {usd_to_hkd:.2f} 換算）"
-        else:
-            sym = "USD $"
-            total_mv   = usd_mv   + hkd_mv   * hkd_to_usd
-            total_cost = usd_cost + hkd_cost * hkd_to_usd
-            total_pnl  = usd_pnl  + hkd_pnl  * hkd_to_usd
-            note_usd = f"（HKD 部分以 {hkd_to_usd:.4f} 換算）"
-
-        total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
-        pnl_sign = "+" if total_pnl >= 0 else ""
-
-        t1, t2, t3, t4 = st.columns(4)
-        t1.metric("💼 總持倉市值", f"{sym}{total_mv:,.2f}")
-        t2.metric("📊 總持倉成本", f"{sym}{total_cost:,.2f}")
-        t3.metric("💰 總盈虧", f"{sym}{total_pnl:,.2f}",
-                  delta=f"{pnl_sign}{total_pnl_pct:.2f}%", delta_color="normal")
-        t4.metric("📌 持倉數目", f"{len(st.session_state.my_holdings)} 隻")
-        st.caption(note_usd)
-
-        # 總持倉圓餅（USD vs HKD 市值佔比，換算後）
-        if usd_h and hkd_h:
-            if display_ccy == "HKD 港元":
-                usd_converted = usd_mv * usd_to_hkd
-                pie_total_df = pd.DataFrame([
-                    {"類別": f"🇺🇸 美股 (USD≈HK${usd_converted:,.0f})", "市值": usd_converted},
-                    {"類別": f"🇭🇰 港股 (HK${hkd_mv:,.0f})", "市值": hkd_mv},
-                ])
-            else:
-                hkd_converted = hkd_mv * hkd_to_usd
-                pie_total_df = pd.DataFrame([
-                    {"類別": f"🇺🇸 美股 (USD${usd_mv:,.0f})", "市值": usd_mv},
-                    {"類別": f"🇭🇰 港股 (≈USD${hkd_converted:,.0f})", "市值": hkd_converted},
-                ])
-            fig_total = px.pie(pie_total_df, values="市值", names="類別", hole=0.5,
-                               color_discrete_sequence=["#378ADD", "#1D9E75"])
-            fig_total.update_layout(template="plotly_dark",
-                                    margin=dict(l=10, r=10, t=20, b=10), showlegend=True)
-            st.plotly_chart(fig_total, use_container_width=True)
-
-    st.markdown("---")
+    # ---- 總持倉總覽 ----（已移入 tab1）
 
     if "my_trades" not in st.session_state:
         st.session_state.my_trades = []
@@ -1018,6 +949,73 @@ elif page_choice == "📈 投資持倉記錄":
 
     # ══════ TAB 1: 持倉總覽 ══════
     with tab1:
+
+        # ---- 總持倉總覽 ----
+        if st.session_state.my_holdings:
+            st.markdown("#### 🌐 總持倉總覽")
+
+            usd_h = [h for h in st.session_state.my_holdings if h.get("幣別", "USD") == "USD"]
+            hkd_h = [h for h in st.session_state.my_holdings if h.get("幣別", "USD") == "HKD"]
+
+            usd_mv   = sum(float(h.get("市值") or 0) for h in usd_h)
+            usd_pnl  = sum(float(h.get("盈虧") or 0) for h in usd_h)
+            usd_cost = sum(float(h.get("數量") or 0) * float(h.get("平均成本") or 0) for h in usd_h)
+            hkd_mv   = sum(float(h.get("市值") or 0) for h in hkd_h)
+            hkd_pnl  = sum(float(h.get("盈虧") or 0) for h in hkd_h)
+            hkd_cost = sum(float(h.get("數量") or 0) * float(h.get("平均成本") or 0) for h in hkd_h)
+
+            fx_col1, fx_col2 = st.columns([2, 1])
+            with fx_col1:
+                display_ccy = st.radio("顯示幣別", ["HKD 港元", "USD 美元"], horizontal=True, key="portfolio_ccy")
+            with fx_col2:
+                usd_to_hkd = st.number_input("USD → HKD 匯率", value=7.80, min_value=1.0, step=0.01, key="fx_rate")
+
+            hkd_to_usd = 1.0 / usd_to_hkd
+
+            if display_ccy == "HKD 港元":
+                sym = "HK$"
+                total_mv   = hkd_mv   + usd_mv   * usd_to_hkd
+                total_cost = hkd_cost + usd_cost * usd_to_hkd
+                total_pnl  = hkd_pnl  + usd_pnl  * usd_to_hkd
+                note_usd = f"（USD 部分以 {usd_to_hkd:.2f} 換算）"
+            else:
+                sym = "USD $"
+                total_mv   = usd_mv   + hkd_mv   * hkd_to_usd
+                total_cost = usd_cost + hkd_cost * hkd_to_usd
+                total_pnl  = usd_pnl  + hkd_pnl  * hkd_to_usd
+                note_usd = f"（HKD 部分以 {hkd_to_usd:.4f} 換算）"
+
+            total_pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
+            pnl_sign = "+" if total_pnl >= 0 else ""
+
+            t1, t2, t3, t4 = st.columns(4)
+            t1.metric("💼 總持倉市值", f"{sym}{total_mv:,.2f}")
+            t2.metric("📊 總持倉成本", f"{sym}{total_cost:,.2f}")
+            t3.metric("💰 總盈虧", f"{sym}{total_pnl:,.2f}",
+                      delta=f"{pnl_sign}{total_pnl_pct:.2f}%", delta_color="normal")
+            t4.metric("📌 持倉數目", f"{len(st.session_state.my_holdings)} 隻")
+            st.caption(note_usd)
+
+            if usd_h and hkd_h:
+                if display_ccy == "HKD 港元":
+                    usd_converted = usd_mv * usd_to_hkd
+                    pie_total_df = pd.DataFrame([
+                        {"類別": f"🇺🇸 美股 (≈HK${usd_converted:,.0f})", "市值": usd_converted},
+                        {"類別": f"🇭🇰 港股 (HK${hkd_mv:,.0f})", "市值": hkd_mv},
+                    ])
+                else:
+                    hkd_converted = hkd_mv * hkd_to_usd
+                    pie_total_df = pd.DataFrame([
+                        {"類別": f"🇺🇸 美股 (USD${usd_mv:,.0f})", "市值": usd_mv},
+                        {"類別": f"🇭🇰 港股 (≈USD${hkd_converted:,.0f})", "市值": hkd_converted},
+                    ])
+                fig_total = px.pie(pie_total_df, values="市值", names="類別", hole=0.5,
+                                   color_discrete_sequence=["#378ADD", "#1D9E75"])
+                fig_total.update_layout(template="plotly_dark",
+                                        margin=dict(l=10, r=10, t=20, b=10), showlegend=True)
+                st.plotly_chart(fig_total, use_container_width=True)
+
+        st.markdown("---")
         st.write("#### ➕ 新增持倉")
         with st.form("add_holding_form", clear_on_submit=True):
             h1, h2, h3, h4, h5 = st.columns([2, 1, 1, 1, 1])
