@@ -383,6 +383,7 @@ if st.session_state.uid is None:
             st.session_state.my_income_categories = data.get("income_categories", [])
             st.session_state.my_logs = data.get("logs", [])
             st.session_state.my_holdings = data.get("holdings", [])
+            st.session_state.my_trades = data.get("trades", [])
 
 
 # ==================== 登入/註冊頁面 ====================
@@ -411,6 +412,7 @@ if st.session_state.uid is None:
                     st.session_state.my_income_categories = data.get("income_categories", [])
                     st.session_state.my_logs = data.get("logs", [])
                     st.session_state.my_holdings = data.get("holdings", [])
+                    st.session_state.my_trades = data.get("trades", [])
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
@@ -446,6 +448,7 @@ if st.session_state.uid is None:
                     st.session_state.my_income_categories = data["income_categories"]
                     st.session_state.my_logs = data["logs"]
                     st.session_state.my_holdings = data.get("holdings", [])
+                    st.session_state.my_trades = data.get("trades", [])
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
@@ -463,7 +466,8 @@ def save_now():
         "budget": st.session_state.my_budget,
         "income_categories": st.session_state.my_income_categories,
         "logs": st.session_state.my_logs,
-        "holdings": st.session_state.get("my_holdings", [])
+        "holdings": st.session_state.get("my_holdings", []),
+        "trades": st.session_state.get("my_trades", [])
     })
 
 # ==================== 核心財務計算 ====================
@@ -1007,168 +1011,225 @@ elif page_choice == "📈 投資持倉記錄":
 
     st.markdown("---")
 
-    # ---- 新增持倉表單 ----
-    st.write("#### ➕ 新增持倉")
-    with st.form("add_holding_form", clear_on_submit=True):
-        h1, h2, h3, h4, h5 = st.columns([2, 1, 1, 1, 1])
-        with h1:
-            h_name = st.text_input("名稱", placeholder="例如：蘋果 AAPL")
-        with h2:
-            h_currency = st.selectbox("幣別", ["USD 🇺🇸", "HKD 🇭🇰"])
-        with h3:
-            h_qty = st.number_input("數量/單位", min_value=0.0, step=0.01)
-        with h4:
-            h_price = st.number_input("現價", min_value=0.0, step=0.01)
-        with h5:
-            h_cost = st.number_input("平均成本", min_value=0.0, step=0.01)
-        if st.form_submit_button("➕ 加入持倉", use_container_width=True):
-            if h_name.strip():
-                currency_code = "USD" if h_currency.startswith("USD") else "HKD"
-                st.session_state.my_holdings.append({
-                    "名稱": h_name.strip(),
-                    "幣別": currency_code,
-                    "數量": h_qty,
-                    "現價": h_price,
-                    "平均成本": h_cost,
-                    "市值": round(h_qty * h_price, 2),
-                    "盈虧": round(h_qty * (h_price - h_cost), 2)
-                })
-                save_now()
-                st.success(f"✅ 已加入：{h_name.strip()} ({currency_code})")
-                st.rerun()
-            else:
-                st.warning("請填寫名稱")
+    if "my_trades" not in st.session_state:
+        st.session_state.my_trades = []
 
-    st.markdown("---")
+    tab1, tab2 = st.tabs(["📊 持倉總覽", "📋 交易記錄"])
 
-    # ---- 持倉列表 ----
-    if st.session_state.my_holdings:
-
-        # 分組
-        usd_holdings = [(i, h) for i, h in enumerate(st.session_state.my_holdings) if h.get("幣別", "USD") == "USD"]
-        hkd_holdings = [(i, h) for i, h in enumerate(st.session_state.my_holdings) if h.get("幣別", "USD") == "HKD"]
-
-        def holdings_summary(holdings_list):
-            mv = sum(float(h.get("市值") or 0) for _, h in holdings_list)
-            pnl = sum(float(h.get("盈虧") or 0) for _, h in holdings_list)
-            cost = sum(float(h.get("數量") or 0) * float(h.get("平均成本") or 0) for _, h in holdings_list)
-            return mv, pnl, cost
-
-        def render_holdings_group(holdings_list, currency_symbol, currency_label):
-            if not holdings_list:
-                st.info(f"尚無 {currency_label} 持倉")
-                return
-
-            mv, pnl, cost = holdings_summary(holdings_list)
-            pnl_pct = (pnl / cost * 100) if cost > 0 else 0.0
-            pnl_sign = "+" if pnl >= 0 else ""
-
-            sm1, sm2, sm3 = st.columns(3)
-            sm1.metric("💼 總市值", f"{currency_symbol}{mv:,.2f}")
-            sm2.metric("📊 總成本", f"{currency_symbol}{cost:,.2f}")
-            sm3.metric("💰 總盈虧", f"{currency_symbol}{pnl:,.2f}",
-                       delta=f"{pnl_sign}{pnl_pct:.2f}%", delta_color="normal")
-
-            # 圓餅圖
-            if len(holdings_list) > 1:
-                pie_df = pd.DataFrame([
-                    {"名稱": h.get("名稱", ""), "市值": h.get("市值", 0)}
-                    for _, h in holdings_list if h.get("市值", 0) > 0
-                ])
-                if not pie_df.empty:
-                    fig_h = px.pie(pie_df, values="市值", names="名稱", hole=0.4,
-                                   color_discrete_sequence=px.colors.sequential.Teal)
-                    fig_h.update_layout(template="plotly_dark",
-                                        margin=dict(l=10, r=10, t=20, b=10), showlegend=True)
-                    st.plotly_chart(fig_h, use_container_width=True)
-
-            # 表頭
-            hh1, hh2, hh3, hh4, hh5, hh6, hh7 = st.columns([2.2, 1, 1, 1, 1.2, 0.6, 0.6])
-            hh1.markdown("**名稱**"); hh2.markdown("**數量**"); hh3.markdown("**現價**")
-            hh4.markdown("**成本**"); hh5.markdown("**盈虧 (%)**")
-            hh6.markdown("✏️"); hh7.markdown("🗑️")
-            st.markdown("---")
-
-            for i, h in holdings_list:
-                c1, c2, c3, c4, c5, c6, c7 = st.columns([2.2, 1, 1, 1, 1.2, 0.6, 0.6])
-                pnl_h = float(h.get("盈虧") or 0)
-                qty = float(h.get("數量") or 0)
-                h_cost = float(h.get("平均成本") or 0)
-                h_price = float(h.get("現價") or 0)
-                h_mv = float(h.get("市值") or 0)
-                pnl_p = (pnl_h / (qty * h_cost) * 100) if (qty * h_cost) > 0 else 0.0
-                clr = "#1D9E75" if pnl_h >= 0 else "#E24B4A"
-                sgn = "+" if pnl_h >= 0 else ""
-
-                c1.write(h.get("名稱", ""))
-                c2.write(f'{qty:,.2f}')
-                c3.write(f'{currency_symbol}{h_price:,.2f}')
-                c4.write(f'{currency_symbol}{h_cost:,.2f}')
-                c5.markdown(
-                    f'<span style="color:{clr};font-weight:600">'
-                    f'{sgn}{currency_symbol}{pnl_h:,.2f}<br>'
-                    f'<small>{sgn}{pnl_p:.1f}%</small></span>',
-                    unsafe_allow_html=True
-                )
-
-                if c6.button("✏️", key=f"edit_hold_{i}"):
-                    st.session_state.editing_holding_index = i
-                if c7.button("🗑️", key=f"del_hold_{i}"):
-                    st.session_state.my_holdings.pop(i)
+    # ══════ TAB 1: 持倉總覽 ══════
+    with tab1:
+        st.write("#### ➕ 新增持倉")
+        with st.form("add_holding_form", clear_on_submit=True):
+            h1, h2, h3, h4, h5 = st.columns([2, 1, 1, 1, 1])
+            with h1:
+                h_name = st.text_input("名稱", placeholder="例如：MU美光科技")
+            with h2:
+                h_currency = st.selectbox("幣別", ["USD 🇺🇸", "HKD 🇭🇰"])
+            with h3:
+                h_qty = st.number_input("數量/單位", min_value=0.0, step=0.01)
+            with h4:
+                h_price = st.number_input("現價", min_value=0.0, step=0.01)
+            with h5:
+                h_cost = st.number_input("平均成本", min_value=0.0, step=0.01)
+            if st.form_submit_button("➕ 加入持倉", use_container_width=True):
+                if h_name.strip():
+                    currency_code = "USD" if h_currency.startswith("USD") else "HKD"
+                    st.session_state.my_holdings.append({
+                        "名稱": h_name.strip(), "幣別": currency_code,
+                        "數量": h_qty, "現價": h_price, "平均成本": h_cost,
+                        "市值": round(h_qty * h_price, 2),
+                        "盈虧": round(h_qty * (h_price - h_cost), 2)
+                    })
                     save_now()
+                    st.success(f"✅ 已加入：{h_name.strip()} ({currency_code})")
                     st.rerun()
-
-                # 編輯表單
-                if st.session_state.editing_holding_index == i:
-                    with st.form(key=f"edit_hold_form_{i}"):
-                        st.markdown(f"**編輯持倉：{h.get('名稱', '')}**")
-                        ef1, ef2, ef3, ef4, ef5 = st.columns([2, 1, 1, 1, 1])
-                        with ef1:
-                            new_h_name = st.text_input("名稱", value=h.get("名稱", ""), key=f"ehn_{i}")
-                        with ef2:
-                            cur_idx = 0 if h.get("幣別", "USD") == "USD" else 1
-                            new_h_cur = st.selectbox("幣別", ["USD 🇺🇸", "HKD 🇭🇰"], index=cur_idx, key=f"ehcur_{i}")
-                        with ef3:
-                            new_h_qty = st.number_input("數量", value=float(h.get("數量", 0)), min_value=0.0, step=0.01, key=f"ehq_{i}")
-                        with ef4:
-                            new_h_price = st.number_input("現價", value=float(h.get("現價", 0)), min_value=0.0, step=0.01, key=f"ehp_{i}")
-                        with ef5:
-                            new_h_cost = st.number_input("平均成本", value=float(h.get("平均成本", 0)), min_value=0.0, step=0.01, key=f"ehc_{i}")
-                        esb, ecb = st.columns(2)
-                        with esb:
-                            if st.form_submit_button("💾 儲存", use_container_width=True):
-                                new_cur_code = "USD" if new_h_cur.startswith("USD") else "HKD"
-                                st.session_state.my_holdings[i] = {
-                                    "名稱": new_h_name.strip(),
-                                    "幣別": new_cur_code,
-                                    "數量": new_h_qty,
-                                    "現價": new_h_price,
-                                    "平均成本": new_h_cost,
-                                    "市值": round(new_h_qty * new_h_price, 2),
-                                    "盈虧": round(new_h_qty * (new_h_price - new_h_cost), 2)
-                                }
-                                save_now()
-                                st.session_state.editing_holding_index = None
-                                st.rerun()
-                        with ecb:
-                            if st.form_submit_button("取消", use_container_width=True):
-                                st.session_state.editing_holding_index = None
-                                st.rerun()
-
-                st.divider()
-
-        # ---- 美股 USD ----
-        st.markdown("### 🇺🇸 美股 / USD")
-        render_holdings_group(usd_holdings, "USD $", "USD")
+                else:
+                    st.warning("請填寫名稱")
 
         st.markdown("---")
 
-        # ---- 港股 HKD ----
-        st.markdown("### 🇭🇰 港股 / HKD")
-        render_holdings_group(hkd_holdings, "HK$", "HKD")
+        if st.session_state.my_holdings:
+            usd_holdings = [(i, h) for i, h in enumerate(st.session_state.my_holdings) if h.get("幣別", "USD") == "USD"]
+            hkd_holdings = [(i, h) for i, h in enumerate(st.session_state.my_holdings) if h.get("幣別", "USD") == "HKD"]
 
-    else:
-        st.info("💡 尚無持倉記錄，填寫上方表單加入。")
+            def holdings_summary(holdings_list):
+                mv   = sum(float(h.get("市值") or 0) for _, h in holdings_list)
+                pnl  = sum(float(h.get("盈虧") or 0) for _, h in holdings_list)
+                cost = sum(float(h.get("數量") or 0) * float(h.get("平均成本") or 0) for _, h in holdings_list)
+                return mv, pnl, cost
+
+            def render_holdings_group(holdings_list, currency_symbol, currency_label):
+                if not holdings_list:
+                    st.info(f"尚無 {currency_label} 持倉")
+                    return
+                mv, pnl, cost = holdings_summary(holdings_list)
+                pnl_pct = (pnl / cost * 100) if cost > 0 else 0.0
+                pnl_sign = "+" if pnl >= 0 else ""
+                sm1, sm2, sm3 = st.columns(3)
+                sm1.metric("💼 總市值", f"{currency_symbol}{mv:,.2f}")
+                sm2.metric("📊 總成本", f"{currency_symbol}{cost:,.2f}")
+                sm3.metric("💰 總盈虧", f"{currency_symbol}{pnl:,.2f}",
+                           delta=f"{pnl_sign}{pnl_pct:.2f}%", delta_color="normal")
+                if len(holdings_list) > 1:
+                    pie_df = pd.DataFrame([
+                        {"名稱": h.get("名稱",""), "市值": float(h.get("市值") or 0)}
+                        for _, h in holdings_list if float(h.get("市值") or 0) > 0
+                    ])
+                    if not pie_df.empty:
+                        fig_h = px.pie(pie_df, values="市值", names="名稱", hole=0.4,
+                                       color_discrete_sequence=px.colors.sequential.Teal)
+                        fig_h.update_layout(template="plotly_dark", margin=dict(l=10,r=10,t=20,b=10), showlegend=True)
+                        st.plotly_chart(fig_h, use_container_width=True)
+                hh1,hh2,hh3,hh4,hh5,hh6,hh7 = st.columns([2.2,1,1,1,1.2,0.6,0.6])
+                hh1.markdown("**名稱**"); hh2.markdown("**數量**"); hh3.markdown("**現價**")
+                hh4.markdown("**成本**"); hh5.markdown("**盈虧(%)**"); hh6.markdown("✏️"); hh7.markdown("🗑️")
+                st.markdown("---")
+                for i, h in holdings_list:
+                    c1,c2,c3,c4,c5,c6,c7 = st.columns([2.2,1,1,1,1.2,0.6,0.6])
+                    pnl_h = float(h.get("盈虧") or 0)
+                    qty   = float(h.get("數量") or 0)
+                    h_cost  = float(h.get("平均成本") or 0)
+                    h_price = float(h.get("現價") or 0)
+                    pnl_p = (pnl_h/(qty*h_cost)*100) if (qty*h_cost)>0 else 0.0
+                    clr = "#1D9E75" if pnl_h >= 0 else "#E24B4A"
+                    sgn = "+" if pnl_h >= 0 else ""
+                    c1.write(h.get("名稱",""))
+                    c2.write(f'{qty:,.2f}')
+                    c3.write(f'{currency_symbol}{h_price:,.2f}')
+                    c4.write(f'{currency_symbol}{h_cost:,.2f}')
+                    c5.markdown(f'<span style="color:{clr};font-weight:600">{sgn}{currency_symbol}{pnl_h:,.2f}<br><small>{sgn}{pnl_p:.1f}%</small></span>', unsafe_allow_html=True)
+                    if c6.button("✏️", key=f"edit_hold_{i}"):
+                        st.session_state.editing_holding_index = i
+                    if c7.button("🗑️", key=f"del_hold_{i}"):
+                        st.session_state.my_holdings.pop(i); save_now(); st.rerun()
+                    if st.session_state.editing_holding_index == i:
+                        with st.form(key=f"edit_hold_form_{i}"):
+                            st.markdown(f"**編輯：{h.get('名稱','')}**")
+                            ef1,ef2,ef3,ef4,ef5 = st.columns([2,1,1,1,1])
+                            with ef1: new_h_name  = st.text_input("名稱", value=h.get("名稱",""), key=f"ehn_{i}")
+                            with ef2:
+                                cur_idx = 0 if h.get("幣別","USD")=="USD" else 1
+                                new_h_cur = st.selectbox("幣別", ["USD 🇺🇸","HKD 🇭🇰"], index=cur_idx, key=f"ehcur_{i}")
+                            with ef3: new_h_qty   = st.number_input("數量",  value=float(h.get("數量") or 0),       min_value=0.0, step=0.01, key=f"ehq_{i}")
+                            with ef4: new_h_price = st.number_input("現價",  value=float(h.get("現價") or 0),       min_value=0.0, step=0.01, key=f"ehp_{i}")
+                            with ef5: new_h_cost  = st.number_input("平均成本",value=float(h.get("平均成本") or 0), min_value=0.0, step=0.01, key=f"ehc_{i}")
+                            esb, ecb = st.columns(2)
+                            with esb:
+                                if st.form_submit_button("💾 儲存", use_container_width=True):
+                                    nc = "USD" if new_h_cur.startswith("USD") else "HKD"
+                                    st.session_state.my_holdings[i] = {
+                                        "名稱": new_h_name.strip(), "幣別": nc,
+                                        "數量": new_h_qty, "現價": new_h_price, "平均成本": new_h_cost,
+                                        "市值": round(new_h_qty*new_h_price,2),
+                                        "盈虧": round(new_h_qty*(new_h_price-new_h_cost),2)
+                                    }
+                                    save_now(); st.session_state.editing_holding_index = None; st.rerun()
+                            with ecb:
+                                if st.form_submit_button("取消", use_container_width=True):
+                                    st.session_state.editing_holding_index = None; st.rerun()
+                    st.divider()
+
+            st.markdown("### 🇺🇸 美股 / USD")
+            render_holdings_group(usd_holdings, "USD $", "USD")
+            st.markdown("---")
+            st.markdown("### 🇭🇰 港股 / HKD")
+            render_holdings_group(hkd_holdings, "HK$", "HKD")
+        else:
+            st.info("💡 尚無持倉記錄，填寫上方表單加入。")
+
+    # ══════ TAB 2: 交易記錄 ══════
+    with tab2:
+        st.write("#### 📝 新增交易（買入 / 賣出）")
+        with st.form("add_trade_form", clear_on_submit=True):
+            tr1,tr2,tr3,tr4 = st.columns([1.8,1,1,1])
+            with tr1: tr_name     = st.text_input("股票名稱", placeholder="例如：MU美光科技")
+            with tr2: tr_type     = st.selectbox("交易類型", ["📈 買入","📉 賣出"])
+            with tr3: tr_currency = st.selectbox("幣別", ["USD 🇺🇸","HKD 🇭🇰"], key="tr_cur")
+            with tr4: tr_date     = st.date_input("交易日期", datetime.now(), key="tr_date")
+            tr5,tr6,tr7,tr8 = st.columns(4)
+            with tr5: tr_qty   = st.number_input("數量",   min_value=0.0, step=0.01, key="tr_qty")
+            with tr6: tr_price = st.number_input("成交價", min_value=0.0, step=0.01, key="tr_price")
+            with tr7: tr_fee   = st.number_input("手續費", min_value=0.0, step=0.01, key="tr_fee")
+            with tr8: tr_note  = st.text_input("備註", placeholder="可空白", key="tr_note")
+            is_buy = "買" in tr_type
+            net_amt = tr_qty * tr_price + tr_fee if is_buy else tr_qty * tr_price - tr_fee
+            st.caption(f"💡 成交金額：{tr_qty*tr_price:,.2f}　手續費後淨額：{net_amt:,.2f}")
+            if st.form_submit_button("✅ 確認記錄", use_container_width=True):
+                if tr_name.strip() and tr_qty > 0 and tr_price > 0:
+                    tc = "USD" if tr_currency.startswith("USD") else "HKD"
+                    st.session_state.my_trades.append({
+                        "日期": tr_date.strftime("%Y/%m/%d"),
+                        "名稱": tr_name.strip(),
+                        "類型": "買入" if is_buy else "賣出",
+                        "幣別": tc,
+                        "數量": tr_qty,
+                        "成交價": tr_price,
+                        "手續費": tr_fee,
+                        "備註": tr_note,
+                        "成交金額": round(net_amt, 2),
+                    })
+                    save_now()
+                    st.success(f"✅ {'買入' if is_buy else '賣出'} {tr_name.strip()} × {tr_qty} @ {tr_price}")
+                    st.rerun()
+                else:
+                    st.warning("請填寫名稱、數量及成交價")
+
+        st.markdown("---")
+
+        if st.session_state.my_trades:
+            trades_df = pd.DataFrame(st.session_state.my_trades)
+            f1,f2,f3 = st.columns(3)
+            with f1: f_name = st.text_input("🔍 搜尋股票", placeholder="名稱關鍵字", key="tr_search")
+            with f2: f_type = st.selectbox("交易類型", ["全部","買入","賣出"], key="tr_filter_type")
+            with f3: f_cur  = st.selectbox("幣別", ["全部","USD","HKD"], key="tr_filter_cur")
+            filtered = trades_df.copy()
+            if f_name: filtered = filtered[filtered["名稱"].str.contains(f_name, case=False, na=False)]
+            if f_type != "全部": filtered = filtered[filtered["類型"] == f_type]
+            if f_cur  != "全部": filtered = filtered[filtered["幣別"]  == f_cur]
+            filtered = filtered.sort_values("日期", ascending=False).reset_index(drop=True)
+
+            buy_df  = filtered[filtered["類型"]=="買入"]
+            sell_df = filtered[filtered["類型"]=="賣出"]
+            total_buy    = float(buy_df["成交金額"].sum())  if not buy_df.empty  else 0.0
+            total_sell   = float(sell_df["成交金額"].sum()) if not sell_df.empty else 0.0
+            realized_pnl = total_sell - total_buy
+
+            s1,s2,s3,s4 = st.columns(4)
+            s1.metric("📈 買入總額",  f"{total_buy:,.2f}")
+            s2.metric("📉 賣出總額",  f"{total_sell:,.2f}")
+            pnl_sign = "+" if realized_pnl >= 0 else ""
+            s3.metric("💰 實現盈虧", f"{pnl_sign}{realized_pnl:,.2f}", delta_color="normal")
+            s4.metric("📋 交易筆數", f"{len(filtered)} 筆")
+
+            st.markdown("")
+            th1,th2,th3,th4,th5,th6,th7,th8,th9 = st.columns([1.2,1.8,0.8,0.7,0.8,1,1,0.9,0.5])
+            th1.markdown("**日期**"); th2.markdown("**名稱**"); th3.markdown("**類型**")
+            th4.markdown("**幣別**"); th5.markdown("**數量**"); th6.markdown("**成交價**")
+            th7.markdown("**淨額**");  th8.markdown("**備註**"); th9.markdown("🗑️")
+            st.markdown("---")
+
+            for idx, row in filtered.iterrows():
+                c1,c2,c3,c4,c5,c6,c7,c8,c9 = st.columns([1.2,1.8,0.8,0.7,0.8,1,1,0.9,0.5])
+                clr = "#1D9E75" if row["類型"]=="買入" else "#E24B4A"
+                c1.write(row["日期"])
+                c2.write(row["名稱"])
+                c3.markdown(f'<span style="color:{clr};font-weight:600">{row["類型"]}</span>', unsafe_allow_html=True)
+                c4.write(row["幣別"])
+                c5.write(f'{float(row["數量"]):,.2f}')
+                c6.write(f'{float(row["成交價"]):,.2f}')
+                c7.write(f'{float(row["成交金額"]):,.2f}')
+                c8.write(row.get("備註",""))
+                # find original index for deletion
+                match_idx = next((j for j,t in enumerate(st.session_state.my_trades)
+                    if t["日期"]==row["日期"] and t["名稱"]==row["名稱"]
+                    and float(t["成交價"])==float(row["成交價"])
+                    and float(t["數量"])==float(row["數量"])), -1)
+                if c9.button("🗑️", key=f"del_trade_{idx}"):
+                    if match_idx >= 0:
+                        st.session_state.my_trades.pop(match_idx); save_now(); st.rerun()
+                st.divider()
+        else:
+            st.info("💡 尚無交易記錄，填寫上方表單加入。")
 
 # ==================== 頁面 5: 批量上載 ====================
 elif page_choice == "📤 批量上載 Excel/CSV 檔案":
