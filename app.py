@@ -361,6 +361,23 @@ def extract_ticker(name: str, currency: str) -> str | None:
         return us_any.group(1)
     return None
 
+def normalize_stock_key(name: str, currency: str) -> str:
+    """
+    將股票名稱正規化成統一的分組 key，避免「6869 長飛光纖纖」與「6869長飛光纖纖」
+    （有無空格、全半角等差異）被當成兩隻不同股票，導致買賣記錄無法互相匹配。
+
+    規則：
+    1. 先嘗試用 extract_ticker 取得 ticker（例如 6869.HK / MU），用 ticker 作 key。
+    2. 若取不到 ticker，fallback 為「去除所有空白後的名稱」作 key。
+    """
+    if not name:
+        return ""
+    ticker = extract_ticker(name, currency)
+    if ticker:
+        return ticker.upper()
+    # fallback：去除所有空白字元（包含全角空格）
+    return "".join(name.split()).replace("\u3000", "")
+
 # ==================== 登入狀態 ====================
 if "uid" not in st.session_state:
     st.session_state.uid = None
@@ -475,55 +492,70 @@ def compute_holdings_from_trades(trades: list) -> list:
     """
     根據交易記錄用 FIFO 計算當前持倉。
     每隻股票獨立計算，買入加入 FIFO queue，賣出從最舊批次扣除。
+
+    重要：分組 key 使用 normalize_stock_key（基於 ticker 或去空格名稱），
+    避免「6869 長飛光纖纖」與「6869長飛光纖纖」這類因空格不同
+    而被誤判為兩隻股票，導致買賣無法互相匹配、賣出記錄失效。
+
     回傳持倉列表（格式與原 my_holdings 相容）。
     """
     from collections import defaultdict
-    import copy
 
-    # 按日期排序
-    sorted_trades = sorted(trades, key=lambda t: t.get("日期", ""))
+    # 按日期排序（日期相同時保持原順序，避免買賣順序錯亂）
+    sorted_trades = sorted(
+        enumerate(trades),
+        key=lambda x: (x[1].get("日期", ""), x[0])
+    )
+    sorted_trades = [t for _, t in sorted_trades]
 
-    # 每隻股票的 FIFO lot queue: {name: [{"qty": x, "price": y}, ...]}
+    # 每隻股票的 FIFO lot queue: {key: [{"qty": x, "price": y}, ...]}
     lots = defaultdict(list)
-    currency_map = {}  # name -> currency
+    currency_map = {}   # key -> currency
+    display_name = {}   # key -> 顯示用名稱（取第一次出現的名稱）
 
     for t in sorted_trades:
-        name     = t.get("名稱", "").strip()
+        raw_name = t.get("名稱", "").strip()
         currency = t.get("幣別", "USD")
         qty      = float(t.get("數量") or 0)
         price    = float(t.get("成交價") or 0)
         fee      = float(t.get("手續費") or 0)
         ttype    = t.get("類型", "買入")
 
-        currency_map[name] = currency
+        key = normalize_stock_key(raw_name, currency)
+        if not key:
+            continue
+
+        currency_map[key] = currency
+        if key not in display_name:
+            display_name[key] = raw_name
 
         if ttype == "買入":
             # 買入成本含手續費
             cost_per_share = (qty * price + fee) / qty if qty > 0 else price
-            lots[name].append({"qty": qty, "price": cost_per_share})
+            lots[key].append({"qty": qty, "price": cost_per_share})
 
         elif ttype == "賣出":
             remaining = qty
-            while remaining > 0 and lots[name]:
-                oldest = lots[name][0]
-                if oldest["qty"] <= remaining:
+            while remaining > 0 and lots[key]:
+                oldest = lots[key][0]
+                if oldest["qty"] <= remaining + 1e-9:
                     remaining -= oldest["qty"]
-                    lots[name].pop(0)
+                    lots[key].pop(0)
                 else:
                     oldest["qty"] -= remaining
                     remaining = 0
 
     # 計算每隻股票的持倉
     holdings = []
-    for name, lot_list in lots.items():
+    for key, lot_list in lots.items():
         total_qty = sum(l["qty"] for l in lot_list)
         if total_qty <= 0.0001:
             continue  # 已全部賣出
         total_cost = sum(l["qty"] * l["price"] for l in lot_list)
         avg_cost = total_cost / total_qty if total_qty > 0 else 0
         holdings.append({
-            "名稱": name,
-            "幣別": currency_map.get(name, "USD"),
+            "名稱": display_name.get(key, key),
+            "幣別": currency_map.get(key, "USD"),
             "數量": round(total_qty, 4),
             "現價": 0.0,   # 待自動更新
             "平均成本": round(avg_cost, 4),
@@ -973,10 +1005,16 @@ elif page_choice == "📈 投資持倉記錄":
     # ---- 自動由交易計算持倉，保留已更新現價 ----
     computed = compute_holdings_from_trades(st.session_state.my_trades)
     # 保留舊有現價（避免自動更新後被清空）
-    old_prices = {h["名稱"]: float(h.get("現價") or 0)
-                  for h in st.session_state.get("my_holdings", [])}
+    # 用 normalize_stock_key 比對，避免名稱空格差異導致現價對不上
+    old_prices = {}
+    for h in st.session_state.get("my_holdings", []):
+        k = normalize_stock_key(h.get("名稱", ""), h.get("幣別", "USD"))
+        if k:
+            old_prices[k] = float(h.get("現價") or 0)
+
     for h in computed:
-        old_p = old_prices.get(h["名稱"], 0.0)
+        k = normalize_stock_key(h.get("名稱", ""), h.get("幣別", "USD"))
+        old_p = old_prices.get(k, 0.0)
         if old_p > 0:
             h["現價"] = old_p
             h["市值"] = round(h["數量"] * old_p, 2)
