@@ -376,8 +376,9 @@ if st.session_state.uid is None:
             st.session_state.my_budget = data.get("budget", {})
             st.session_state.my_income_categories = data.get("income_categories", [])
             st.session_state.my_logs = data.get("logs", [])
-            st.session_state.my_holdings = data.get("holdings", [])
+            st.session_state.my_holdings = []  # 由 refresh_holdings() 從 trades 重算
             st.session_state.my_trades = data.get("trades", [])
+            st.session_state.my_holdings_prices = data.get("holdings_prices", {})
 
 # ==================== 登入/註冊頁 ====================
 if st.session_state.uid is None:
@@ -404,8 +405,9 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data.get("budget", {})
                     st.session_state.my_income_categories = data.get("income_categories", [])
                     st.session_state.my_logs = data.get("logs", [])
-                    st.session_state.my_holdings = data.get("holdings", [])
+                    st.session_state.my_holdings = []  # 由 refresh_holdings() 從 trades 重算
                     st.session_state.my_trades = data.get("trades", [])
+                    st.session_state.my_holdings_prices = data.get("holdings_prices", {})
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
@@ -449,25 +451,36 @@ if st.session_state.uid is None:
                     st.error(f"❌ {result.get('error', {}).get('message', '註冊失敗')}")
     st.stop()
 
-# ==================== 存檔 ====================
+# ==================== 存檔（連現價一齊儲）====================
 def save_now():
+    # holdings_prices 儲存現價，登入後可以恢復
+    prices_map = {
+        f"{h['名稱']}|{h.get('幣別','USD')}": float(h.get("現價") or 0)
+        for h in st.session_state.get("my_holdings", [])
+        if float(h.get("現價") or 0) > 0
+    }
     save_user_data(st.session_state.uid, {
         "assets": st.session_state.my_assets,
         "liabilities": st.session_state.my_liabilities,
         "budget": st.session_state.my_budget,
         "income_categories": st.session_state.my_income_categories,
         "logs": st.session_state.my_logs,
-        "trades": st.session_state.get("my_trades", [])
+        "trades": st.session_state.get("my_trades", []),
+        "holdings_prices": prices_map,
     })
 
 # ==================== 計算持倉並合併舊現價 ====================
 def refresh_holdings():
     computed = compute_holdings_from_trades(st.session_state.get("my_trades", []))
-    old_prices = {(h["名稱"], h.get("幣別","USD")): float(h.get("現價") or 0)
-                  for h in st.session_state.get("my_holdings", [])}
+    # session 中已有的現價（自動更新後）
+    session_prices = {(h["名稱"], h.get("幣別","USD")): float(h.get("現價") or 0)
+                      for h in st.session_state.get("my_holdings", [])}
+    # Firebase 載入的現價（登入恢復用）
+    saved_prices = st.session_state.get("my_holdings_prices", {})
     for h in computed:
         key = (h["名稱"], h.get("幣別","USD"))
-        old_p = old_prices.get(key, 0.0)
+        price_key = f"{h['名稱']}|{h.get('幣別','USD')}"
+        old_p = session_prices.get(key, 0.0) or float(saved_prices.get(price_key, 0))
         if old_p > 0:
             h["現價"] = old_p
             h["市值"] = round(h["數量"] * old_p, 4)
