@@ -146,33 +146,57 @@ hr { border: none !important; border-top: 1px solid rgba(255,255,255,0.07) !impo
     line-height: 1.7;
 }
 
-/* ══ 手機 / iPad 響應式 ══ */
-@media (max-width: 1024px) {
-    /* iPad: 側邊欄預設收起 */
-    [data-testid="stSidebar"] { min-width: 220px !important; }
-    .main .block-container { padding-left: 1rem !important; padding-right: 1rem !important; }
+/* ══ Metric 數值自動縮放（全局）══ */
+[data-testid="stMetricValue"] {
+    font-size: clamp(0.85rem, 2vw, 1.5rem) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+    max-width: 100% !important;
 }
-@media (max-width: 768px) {
-    h1 { font-size: 1.25rem !important; }
+[data-testid="stMetricLabel"] {
+    font-size: clamp(0.6rem, 1.2vw, 0.78rem) !important;
+    white-space: nowrap !important;
+    overflow: hidden !important;
+    text-overflow: ellipsis !important;
+}
+[data-testid="stMetricDelta"] {
+    font-size: clamp(0.6rem, 1.1vw, 0.85rem) !important;
+    white-space: normal !important;
+    word-break: break-all !important;
+}
+[data-testid="stMetric"] {
+    min-width: 0 !important;
+    overflow: hidden !important;
+}
+
+/* ══ iPad 橫向 (1024px 以下) ══ */
+@media (max-width: 1024px) {
+    [data-testid="stSidebar"] { min-width: 200px !important; max-width: 240px !important; }
+    .main .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
+    [data-testid="stMetric"] { padding: 0.8rem 0.7rem !important; border-radius: 12px !important; }
+    h1 { font-size: 1.2rem !important; }
     h2, h3 { font-size: 1rem !important; }
-    [data-testid="stMetricValue"] { font-size: 1.05rem !important; }
-    [data-testid="stMetricLabel"] { font-size: 0.68rem !important; }
+}
+
+/* ══ iPad 直向 / 大手機 (768px 以下) ══ */
+@media (max-width: 768px) {
+    h1 { font-size: 1.1rem !important; }
+    h2, h3 { font-size: 0.95rem !important; }
     .stButton > button { min-height: 2.8rem !important; font-size: 0.92rem !important; border-radius: 12px !important; }
     .stTextInput input, .stNumberInput input { font-size: 1rem !important; min-height: 2.6rem !important; }
-    .main .block-container { padding-left: 0.5rem !important; padding-right: 0.5rem !important; padding-top: 0.5rem !important; }
-    /* 手機版 metric 2列排版 */
-    [data-testid="stMetric"] { padding: 0.9rem 1rem !important; border-radius: 12px !important; }
-    /* Tab 文字縮小 */
-    .stTabs [data-baseweb="tab"] { padding: 0.4rem 0.7rem !important; font-size: 0.8rem !important; }
-    /* 表單間距 */
-    [data-testid="stForm"] { padding: 0.7rem !important; }
-    /* 隱藏 sidebar 預設展開時遮擋內容 */
-    section[data-testid="stSidebar"] > div { padding-top: 1rem !important; }
+    .main .block-container { padding-left: 0.4rem !important; padding-right: 0.4rem !important; padding-top: 0.5rem !important; }
+    [data-testid="stMetric"] { padding: 0.7rem 0.6rem !important; border-radius: 10px !important; }
+    .stTabs [data-baseweb="tab"] { padding: 0.4rem 0.6rem !important; font-size: 0.78rem !important; }
+    [data-testid="stForm"] { padding: 0.6rem !important; }
+    section[data-testid="stSidebar"] > div { padding-top: 0.8rem !important; }
 }
+
+/* ══ 手機小屏 (480px 以下) ══ */
 @media (max-width: 480px) {
-    h1 { font-size: 1.05rem !important; }
-    [data-testid="stMetricValue"] { font-size: 0.95rem !important; }
-    .ai-card { padding: 0.9rem 1rem !important; font-size: 0.88rem !important; }
+    h1 { font-size: 0.95rem !important; }
+    [data-testid="stMetric"] { padding: 0.6rem 0.5rem !important; }
+    .ai-card { padding: 0.8rem 0.9rem !important; font-size: 0.86rem !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -480,6 +504,20 @@ if not df_current_logs.empty:
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
 
+# ==================== 智能數字格式化（防截斷）====================
+def fmt(val: float, prefix: str = "$") -> str:
+    """自動縮短大數字：>=1M 顯示 1.2M，>=1K 顯示 29K，否則顯示完整"""
+    abs_val = abs(val)
+    sign = "-" if val < 0 else ""
+    if abs_val >= 1_000_000:
+        return f"{sign}{prefix}{abs_val/1_000_000:.1f}M"
+    elif abs_val >= 100_000:
+        return f"{sign}{prefix}{abs_val/1000:.0f}K"
+    elif abs_val >= 10_000:
+        return f"{sign}{prefix}{abs_val/1000:.1f}K"
+    else:
+        return f"{sign}{prefix}{abs_val:,.0f}"
+
 # ==================== 頁面標題 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
 st.caption("🚀 雲端收支全功能 — 收支雙引擎 · FIFO持倉 · AI理財建議 · 手機優化")
@@ -498,25 +536,25 @@ with col_logout:
 st.markdown("---")
 
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.metric("💰 本月總收入", f"${total_actual_income:,.2f}")
-m_col2.metric("💸 本月總支出", f"${total_actual_expense:,.2f}")
-m_col3.metric("📈 預計儲蓄", f"${expected_savings:,.2f}", delta=f"儲蓄率 {savings_rate:.1f}%")
-_nw_delta = f"含持倉 HK${holdings_total_value:,.0f}" if holdings_total_value > 0 else None
-m_col4.metric("👑 當前淨身家", f"HK${net_worth:,.2f}", delta=_nw_delta)
+m_col1.metric("💰 本月收入", fmt(total_actual_income))
+m_col2.metric("💸 本月支出", fmt(total_actual_expense))
+m_col3.metric("📈 預計儲蓄", fmt(expected_savings), delta=f"儲蓄率 {savings_rate:.1f}%")
+_nw_delta = f"含持倉 {fmt(holdings_total_value,'HK$')}" if holdings_total_value > 0 else None
+m_col4.metric("👑 淨身家", fmt(net_worth, "HK$"), delta=_nw_delta)
 
 st.markdown("")
 m2_col1, m2_col2, m2_col3, m2_col4 = st.columns(4)
-m2_col1.metric("🏦 總資產", f"HK${total_assets:,.2f}")
-m2_col2.metric("💳 總負債", f"HK${total_liabilities:,.2f}",
+m2_col1.metric("🏦 總資產", fmt(total_assets, "HK$"))
+m2_col2.metric("💳 總負債", fmt(total_liabilities, "HK$"),
                delta=f"-{(total_liabilities/total_assets*100):.1f}% 負債比" if total_assets > 0 else None,
                delta_color="inverse")
-m2_col3.metric("📈 持倉市值", f"HK${holdings_total_value:,.2f}",
-               delta=f"USD ${_holdings_usd_mv:,.0f} + HKD ${_holdings_hkd_mv:,.0f}" if _holdings else None,
+m2_col3.metric("📈 持倉市值", fmt(holdings_total_value, "HK$"),
+               delta=f"US${fmt(_holdings_usd_mv)} HK${fmt(_holdings_hkd_mv)}" if _holdings else None,
                delta_color="off")
 _net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
 _net_pnl_sign = "+" if _net_pnl >= 0 else ""
-m2_col4.metric("💹 持倉總盈虧", f"HK${_net_pnl:,.2f}",
-               delta=f"{_net_pnl_sign}{_net_pnl:,.0f}", delta_color="normal")
+m2_col4.metric("💹 持倉盈虧", fmt(_net_pnl, "HK$"),
+               delta=f"{_net_pnl_sign}{fmt(abs(_net_pnl),'')}", delta_color="normal")
 st.markdown("---")
 
 # ==================== 側邊欄 ====================
