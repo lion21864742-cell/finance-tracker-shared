@@ -64,7 +64,8 @@ def get_default_data():
             {"日期": "2026/05/20", "類型": "支出 💸", "分類": "飲食", "子分類": "外食",
              "項目": "歡迎使用收支理財系統", "金額": 0.0, "帳戶/備註": "系統初始"}
         ],
-        "trades": []
+        "trades": [],
+        "holdings_prices": {}
     }
 
 # ==================== Page Config ====================
@@ -100,11 +101,21 @@ p, span, div, label { color: #cbd5e0 !important; }
     padding: 1.2rem 1.4rem !important;
     backdrop-filter: blur(10px) !important;
     transition: border-color 0.3s, transform 0.2s !important;
+    min-width: 0 !important;
+    overflow: hidden !important;
 }
 [data-testid="stMetric"]:hover { border-color: rgba(0, 212, 170, 0.5) !important; transform: translateY(-2px) !important; }
-[data-testid="stMetricValue"] { color: #f7fafc !important; font-weight: 700 !important; font-size: 1.5rem !important; }
-[data-testid="stMetricLabel"] { color: #718096 !important; font-size: 0.78rem !important; text-transform: uppercase !important; letter-spacing: 0.05em !important; }
-[data-testid="stMetricDelta"] { font-size: 0.85rem !important; }
+[data-testid="stMetricValue"] {
+    color: #f7fafc !important; font-weight: 700 !important;
+    font-size: clamp(0.85rem, 2vw, 1.5rem) !important;
+    white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+}
+[data-testid="stMetricLabel"] {
+    color: #718096 !important; font-size: clamp(0.6rem, 1.2vw, 0.78rem) !important;
+    text-transform: uppercase !important; letter-spacing: 0.05em !important;
+    white-space: nowrap !important; overflow: hidden !important; text-overflow: ellipsis !important;
+}
+[data-testid="stMetricDelta"] { font-size: clamp(0.6rem, 1.1vw, 0.85rem) !important; }
 
 .stButton > button {
     background: linear-gradient(135deg, #00d4aa, #0ea5e9) !important;
@@ -136,50 +147,21 @@ hr { border: none !important; border-top: 1px solid rgba(255,255,255,0.07) !impo
 [data-testid="stForm"] { background: rgba(255,255,255,0.02) !important; border: 1px solid rgba(255,255,255,0.07) !important; border-radius: 16px !important; padding: 1rem !important; }
 [data-testid="stCaptionContainer"] p { color: #4a5568 !important; font-size: 0.8rem !important; }
 
-/* ══ AI 建議卡片 ══ */
 .ai-card {
     background: linear-gradient(135deg, rgba(0,212,170,0.08), rgba(59,130,246,0.08));
-    border: 1px solid rgba(0,212,170,0.25);
-    border-radius: 14px;
-    padding: 1.2rem 1.4rem;
-    margin-bottom: 1rem;
-    line-height: 1.7;
+    border: 1px solid rgba(0,212,170,0.25); border-radius: 14px;
+    padding: 1.2rem 1.4rem; margin-bottom: 1rem; line-height: 1.7;
 }
 
-/* ══ Metric 數值自動縮放（全局）══ */
-[data-testid="stMetricValue"] {
-    font-size: clamp(0.85rem, 2vw, 1.5rem) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-    max-width: 100% !important;
-}
-[data-testid="stMetricLabel"] {
-    font-size: clamp(0.6rem, 1.2vw, 0.78rem) !important;
-    white-space: nowrap !important;
-    overflow: hidden !important;
-    text-overflow: ellipsis !important;
-}
-[data-testid="stMetricDelta"] {
-    font-size: clamp(0.6rem, 1.1vw, 0.85rem) !important;
-    white-space: normal !important;
-    word-break: break-all !important;
-}
-[data-testid="stMetric"] {
-    min-width: 0 !important;
-    overflow: hidden !important;
-}
-
-/* ══ iPad 橫向 (1024px 以下) ══ */
+/* ══ iPad (<=1024px) ══ */
 @media (max-width: 1024px) {
     [data-testid="stSidebar"] { min-width: 200px !important; max-width: 240px !important; }
     .main .block-container { padding-left: 0.8rem !important; padding-right: 0.8rem !important; }
     [data-testid="stMetric"] { padding: 0.8rem 0.7rem !important; border-radius: 12px !important; }
     h1 { font-size: 1.2rem !important; }
-    h2, h3 { font-size: 1rem !important; }
 }
 
-/* ══ iPad 直向 / 大手機 (768px 以下) ══ */
+/* ══ 手機 (<=768px) ══ */
 @media (max-width: 768px) {
     h1 { font-size: 1.1rem !important; }
     h2, h3 { font-size: 0.95rem !important; }
@@ -189,10 +171,9 @@ hr { border: none !important; border-top: 1px solid rgba(255,255,255,0.07) !impo
     [data-testid="stMetric"] { padding: 0.7rem 0.6rem !important; border-radius: 10px !important; }
     .stTabs [data-baseweb="tab"] { padding: 0.4rem 0.6rem !important; font-size: 0.78rem !important; }
     [data-testid="stForm"] { padding: 0.6rem !important; }
-    section[data-testid="stSidebar"] > div { padding-top: 0.8rem !important; }
 }
 
-/* ══ 手機小屏 (480px 以下) ══ */
+/* ══ 超小屏 (<=480px) ══ */
 @media (max-width: 480px) {
     h1 { font-size: 0.95rem !important; }
     [data-testid="stMetric"] { padding: 0.6rem 0.5rem !important; }
@@ -201,7 +182,7 @@ hr { border: none !important; border-top: 1px solid rgba(255,255,255,0.07) !impo
 </style>
 """, unsafe_allow_html=True)
 
-# ==================== yfinance helpers ====================
+# ==================== Stock helpers ====================
 def fetch_price(ticker: str):
     if not YFINANCE_AVAILABLE:
         return None, "yfinance 未安裝"
@@ -230,8 +211,7 @@ def extract_ticker(name: str, currency: str):
     if currency == "HKD":
         num_match = _re.match(r'^(\d{4,5})', name)
         if num_match:
-            code = int(num_match.group(1))
-            return f"{code:04d}.HK"
+            return f"{int(num_match.group(1)):04d}.HK"
         hk_match = _re.search(r'(\d{1,5}\.HK)', name, _re.IGNORECASE)
         if hk_match:
             return hk_match.group(1).upper()
@@ -243,24 +223,35 @@ def extract_ticker(name: str, currency: str):
         return us_any.group(1)
     return None
 
-# ==================== FIFO 持倉計算（修正版）====================
+def normalize_stock_key(name: str, currency: str) -> str:
+    """
+    正規化股票 key，避免「6869 長飛」與「6869長飛」被當成兩隻股票。
+    優先用 ticker（如 6869.HK / MU），否則用去空格名稱。
+    """
+    if not name:
+        return ""
+    ticker = extract_ticker(name, currency)
+    if ticker:
+        return ticker.upper()
+    return "".join(name.split()).replace("\u3000", "")
+
+# ==================== FIFO 持倉計算（normalize_stock_key 版本）====================
 def compute_holdings_from_trades(trades: list) -> list:
-    """
-    FIFO 持倉計算。
-    Key = (名稱, 幣別) 避免同名不同幣混淆。
-    買入：加入 lot queue（成本含手續費）
-    賣出：從最舊 lot 扣除，並追蹤已實現盈虧
-    """
     from collections import defaultdict
 
-    sorted_trades = sorted(trades, key=lambda t: t.get("日期", ""))
+    sorted_trades = sorted(
+        enumerate(trades),
+        key=lambda x: (x[1].get("日期", ""), x[0])
+    )
+    sorted_trades = [t for _, t in sorted_trades]
 
-    # lots[key] = list of {"qty": float, "cost": float}  (cost = per share cost incl. fee)
-    lots = defaultdict(list)
-    realized_pnl = defaultdict(float)  # (name, ccy) -> realized pnl
+    lots = defaultdict(list)          # key -> [{qty, cost}]
+    realized_pnl = defaultdict(float) # key -> realized pnl
+    currency_map = {}
+    display_name = {}
 
     for tr in sorted_trades:
-        name     = tr.get("名稱", "").strip()
+        raw_name = tr.get("名稱", "").strip()
         currency = tr.get("幣別", "USD")
         qty      = float(tr.get("數量") or 0)
         price    = float(tr.get("成交價") or 0)
@@ -270,90 +261,82 @@ def compute_holdings_from_trades(trades: list) -> list:
         if qty <= 0 or price <= 0:
             continue
 
-        key = (name, currency)
+        key = normalize_stock_key(raw_name, currency)
+        if not key:
+            continue
+
+        currency_map[key] = currency
+        if key not in display_name:
+            display_name[key] = raw_name
 
         if ttype == "買入":
-            # 買入每股成本 = (總金額 + 手續費) / 數量
             cost_per_share = (qty * price + fee) / qty
             lots[key].append({"qty": qty, "cost": cost_per_share})
 
         elif ttype == "賣出":
-            # 賣出收入 = qty * price - fee
-            sell_proceeds = qty * price - fee
-            remaining_qty = qty
+            proceeds = qty * price - fee
+            remaining = qty
             sell_cost = 0.0
-
-            while remaining_qty > 1e-9 and lots[key]:
+            while remaining > 1e-9 and lots[key]:
                 oldest = lots[key][0]
-                if oldest["qty"] <= remaining_qty + 1e-9:
-                    # 整批賣出
+                if oldest["qty"] <= remaining + 1e-9:
                     sell_cost += oldest["qty"] * oldest["cost"]
-                    remaining_qty -= oldest["qty"]
+                    remaining -= oldest["qty"]
                     lots[key].pop(0)
                 else:
-                    # 部分賣出
-                    sell_cost += remaining_qty * oldest["cost"]
-                    oldest["qty"] -= remaining_qty
-                    remaining_qty = 0.0
+                    sell_cost += remaining * oldest["cost"]
+                    oldest["qty"] -= remaining
+                    remaining = 0.0
+            realized_pnl[key] += proceeds - sell_cost
 
-            # 已實現盈虧
-            realized_pnl[key] += sell_proceeds - sell_cost
-
-    # 整理持倉
     holdings = []
-    for (name, currency), lot_list in lots.items():
+    for key, lot_list in lots.items():
         total_qty = sum(l["qty"] for l in lot_list)
         if total_qty < 1e-6:
-            continue  # 已全部賣出
+            continue
         total_cost_val = sum(l["qty"] * l["cost"] for l in lot_list)
         avg_cost = total_cost_val / total_qty
         holdings.append({
-            "名稱": name,
-            "幣別": currency,
+            "名稱": display_name.get(key, key),
+            "幣別": currency_map.get(key, "USD"),
             "數量": round(total_qty, 6),
             "現價": 0.0,
             "平均成本": round(avg_cost, 6),
             "市值": 0.0,
             "盈虧": 0.0,
-            "已實現盈虧": round(realized_pnl.get((name, currency), 0.0), 4),
+            "已實現盈虧": round(realized_pnl.get(key, 0.0), 4),
+            "_key": key,
         })
-
     return holdings
 
 def get_realized_pnl_map(trades: list) -> dict:
-    """回傳各股票已實現盈虧 {(name, ccy): pnl}"""
     from collections import defaultdict
-    sorted_trades = sorted(trades, key=lambda t: t.get("日期", ""))
+    sorted_trades = sorted(enumerate(trades), key=lambda x: (x[1].get("日期",""), x[0]))
+    sorted_trades = [t for _, t in sorted_trades]
     lots = defaultdict(list)
     realized = defaultdict(float)
-
     for tr in sorted_trades:
-        name     = tr.get("名稱", "").strip()
-        currency = tr.get("幣別", "USD")
-        qty      = float(tr.get("數量") or 0)
-        price    = float(tr.get("成交價") or 0)
-        fee      = float(tr.get("手續費") or 0)
-        ttype    = tr.get("類型", "買入")
-        if qty <= 0 or price <= 0:
-            continue
-        key = (name, currency)
+        raw_name = tr.get("名稱","").strip()
+        currency = tr.get("幣別","USD")
+        qty   = float(tr.get("數量") or 0)
+        price = float(tr.get("成交價") or 0)
+        fee   = float(tr.get("手續費") or 0)
+        ttype = tr.get("類型","買入")
+        if qty <= 0 or price <= 0: continue
+        key = normalize_stock_key(raw_name, currency)
+        if not key: continue
         if ttype == "買入":
-            lots[key].append({"qty": qty, "cost": (qty * price + fee) / qty})
+            lots[key].append({"qty": qty, "cost": (qty*price+fee)/qty})
         elif ttype == "賣出":
-            proceeds = qty * price - fee
-            rem = qty
-            cost_basis = 0.0
+            proceeds = qty*price - fee
+            rem = qty; cb = 0.0
             while rem > 1e-9 and lots[key]:
                 ol = lots[key][0]
                 if ol["qty"] <= rem + 1e-9:
-                    cost_basis += ol["qty"] * ol["cost"]
-                    rem -= ol["qty"]
-                    lots[key].pop(0)
+                    cb += ol["qty"]*ol["cost"]; rem -= ol["qty"]; lots[key].pop(0)
                 else:
-                    cost_basis += rem * ol["cost"]
-                    ol["qty"] -= rem
-                    rem = 0.0
-            realized[key] += proceeds - cost_basis
+                    cb += rem*ol["cost"]; ol["qty"] -= rem; rem = 0.0
+            realized[key] += proceeds - cb
     return dict(realized)
 
 # ==================== 登入狀態 ====================
@@ -376,11 +359,11 @@ if st.session_state.uid is None:
             st.session_state.my_budget = data.get("budget", {})
             st.session_state.my_income_categories = data.get("income_categories", [])
             st.session_state.my_logs = data.get("logs", [])
-            st.session_state.my_holdings = []  # 由 refresh_holdings() 從 trades 重算
+            st.session_state.my_holdings = []
             st.session_state.my_trades = data.get("trades", [])
             st.session_state.my_holdings_prices = data.get("holdings_prices", {})
 
-# ==================== 登入/註冊頁 ====================
+# ==================== 登入/註冊 ====================
 if st.session_state.uid is None:
     st.title("💎 Cloud Finance Master Plan 2026")
     st.markdown("---")
@@ -405,7 +388,7 @@ if st.session_state.uid is None:
                     st.session_state.my_budget = data.get("budget", {})
                     st.session_state.my_income_categories = data.get("income_categories", [])
                     st.session_state.my_logs = data.get("logs", [])
-                    st.session_state.my_holdings = []  # 由 refresh_holdings() 從 trades 重算
+                    st.session_state.my_holdings = []
                     st.session_state.my_trades = data.get("trades", [])
                     st.session_state.my_holdings_prices = data.get("holdings_prices", {})
                     st.query_params["uid"] = st.session_state.uid
@@ -443,6 +426,7 @@ if st.session_state.uid is None:
                     st.session_state.my_logs = data["logs"]
                     st.session_state.my_holdings = []
                     st.session_state.my_trades = []
+                    st.session_state.my_holdings_prices = {}
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
@@ -451,11 +435,10 @@ if st.session_state.uid is None:
                     st.error(f"❌ {result.get('error', {}).get('message', '註冊失敗')}")
     st.stop()
 
-# ==================== 存檔（連現價一齊儲）====================
+# ==================== 存檔（含現價）====================
 def save_now():
-    # holdings_prices 儲存現價，登入後可以恢復
     prices_map = {
-        f"{h['名稱']}|{h.get('幣別','USD')}": float(h.get("現價") or 0)
+        h.get("_key", f"{h['名稱']}|{h.get('幣別','USD')}"): float(h.get("現價") or 0)
         for h in st.session_state.get("my_holdings", [])
         if float(h.get("現價") or 0) > 0
     }
@@ -469,18 +452,20 @@ def save_now():
         "holdings_prices": prices_map,
     })
 
-# ==================== 計算持倉並合併舊現價 ====================
+# ==================== refresh_holdings（保留現價）====================
 def refresh_holdings():
     computed = compute_holdings_from_trades(st.session_state.get("my_trades", []))
-    # session 中已有的現價（自動更新後）
-    session_prices = {(h["名稱"], h.get("幣別","USD")): float(h.get("現價") or 0)
-                      for h in st.session_state.get("my_holdings", [])}
-    # Firebase 載入的現價（登入恢復用）
+    # session 中現有的現價
+    session_prices = {
+        h.get("_key", normalize_stock_key(h.get("名稱",""), h.get("幣別","USD"))): float(h.get("現價") or 0)
+        for h in st.session_state.get("my_holdings", [])
+    }
+    # Firebase 儲存的現價（登入時讀取）
     saved_prices = st.session_state.get("my_holdings_prices", {})
+
     for h in computed:
-        key = (h["名稱"], h.get("幣別","USD"))
-        price_key = f"{h['名稱']}|{h.get('幣別','USD')}"
-        old_p = session_prices.get(key, 0.0) or float(saved_prices.get(price_key, 0))
+        key = h.get("_key", "")
+        old_p = session_prices.get(key, 0.0) or float(saved_prices.get(key, 0))
         if old_p > 0:
             h["現價"] = old_p
             h["市值"] = round(h["數量"] * old_p, 4)
@@ -517,9 +502,8 @@ if not df_current_logs.empty:
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
 
-# ==================== 智能數字格式化（防截斷）====================
+# ==================== 智能數字格式化 ====================
 def fmt(val: float, prefix: str = "$") -> str:
-    """自動縮短大數字：>=1M 顯示 1.2M，>=1K 顯示 29K，否則顯示完整"""
     abs_val = abs(val)
     sign = "-" if val < 0 else ""
     if abs_val >= 1_000_000:
@@ -533,7 +517,7 @@ def fmt(val: float, prefix: str = "$") -> str:
 
 # ==================== 頁面標題 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
-st.caption("🚀 雲端收支全功能 — 收支雙引擎 · FIFO持倉 · AI理財建議 · 手機優化")
+st.caption("🚀 雲端收支全功能 — FIFO持倉 · 現價持久化 · AI理財建議 · iPad/手機優化")
 
 col_title, col_logout = st.columns([4, 1])
 with col_logout:
@@ -541,7 +525,8 @@ with col_logout:
     if st.button("登出", use_container_width=True):
         st.query_params.clear()
         for key in ["uid", "user_email", "my_assets", "my_liabilities",
-                    "my_budget", "my_income_categories", "my_logs", "my_trades", "my_holdings"]:
+                    "my_budget", "my_income_categories", "my_logs",
+                    "my_trades", "my_holdings", "my_holdings_prices"]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
@@ -565,9 +550,9 @@ m2_col3.metric("📈 持倉市值", fmt(holdings_total_value, "HK$"),
                delta=f"US${fmt(_holdings_usd_mv)} HK${fmt(_holdings_hkd_mv)}" if _holdings else None,
                delta_color="off")
 _net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
-_net_pnl_sign = "+" if _net_pnl >= 0 else ""
 m2_col4.metric("💹 持倉盈虧", fmt(_net_pnl, "HK$"),
-               delta=f"{_net_pnl_sign}{fmt(abs(_net_pnl),'')}", delta_color="normal")
+               delta=f"{'+'if _net_pnl>=0 else ''}{fmt(abs(_net_pnl),'')}",
+               delta_color="normal")
 st.markdown("---")
 
 # ==================== 側邊欄 ====================
@@ -621,17 +606,14 @@ if page_choice == "📊 財務總覽 & 預算監控":
                 bar_color = "#EF9F27"; status = "🟡 預警"
             else:
                 bar_color = "#1D9E75"; status = "🟢"
-            bar_html = (
+            st.markdown(
                 f"<div style='margin-bottom:10px'>"
                 f"<div style='display:flex;justify-content:space-between;font-size:13px;margin-bottom:3px'>"
                 f"<span><b>{cat}</b> {status}</span>"
-                f"<span style='color:gray'>${a_amount:,.0f} / ${b_amount:,.0f}</span>"
-                f"</div>"
+                f"<span style='color:gray'>${a_amount:,.0f} / ${b_amount:,.0f}</span></div>"
                 f"<div style='background:#1a2a3a;border-radius:6px;height:10px;overflow:hidden'>"
                 f"<div style='width:{use_rate_capped}%;background:{bar_color};height:100%;border-radius:6px'></div>"
-                f"</div></div>"
-            )
-            st.markdown(bar_html, unsafe_allow_html=True)
+                f"</div></div>", unsafe_allow_html=True)
 
     st.markdown("---")
     st.subheader("📈 收支趨勢")
@@ -646,9 +628,13 @@ if page_choice == "📊 財務總覽 & 預算監控":
         if not df_line.empty:
             fig_line = px.line(df_line, x="日期", y="金額", color="類型",
                                color_discrete_map={"收入": "#1D9E75", "支出": "#E24B4A"}, markers=True)
-            fig_line.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10),
+            fig_line.update_layout(template="plotly_dark", margin=dict(l=10,r=10,t=10,b=10),
                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
             st.plotly_chart(fig_line, use_container_width=True)
+        else:
+            st.info("💡 數據不足，記帳後自動呈現趨勢圖。")
+    else:
+        st.info("💡 尚無記帳數據。")
 
     st.markdown("---")
     st.subheader("📊 本月 vs 上月支出比較")
@@ -667,14 +653,20 @@ if page_choice == "📊 財務總覽 & 預算監控":
         last_m_data = df_exp_only[(df_exp_only["日期_dt"] >= last_m_start) & (df_exp_only["日期_dt"] <= last_m_end)].groupby("分類")["金額"].sum()
         all_cats = list(set(this_m_data.index.tolist() + last_m_data.index.tolist()))
         if all_cats:
-            cmp_df = pd.DataFrame({"分類": all_cats, "本月": [this_m_data.get(c, 0) for c in all_cats], "上月": [last_m_data.get(c, 0) for c in all_cats]})
-            cmp_df = cmp_df[(cmp_df["本月"] > 0) | (cmp_df["上月"] > 0)].sort_values("本月", ascending=False)
+            cmp_df = pd.DataFrame({"分類": all_cats,
+                                   "本月": [this_m_data.get(c,0) for c in all_cats],
+                                   "上月": [last_m_data.get(c,0) for c in all_cats]})
+            cmp_df = cmp_df[(cmp_df["本月"]>0)|(cmp_df["上月"]>0)].sort_values("本月", ascending=False)
             cmp_melt = cmp_df.melt(id_vars="分類", var_name="月份", value_name="金額")
             fig_bar = px.bar(cmp_melt, x="分類", y="金額", color="月份", barmode="group",
-                             color_discrete_map={"本月": "#378ADD", "上月": "#888780"})
-            fig_bar.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10),
+                             color_discrete_map={"本月":"#378ADD","上月":"#888780"})
+            fig_bar.update_layout(template="plotly_dark", margin=dict(l=10,r=10,t=10,b=10),
                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
             st.plotly_chart(fig_bar, use_container_width=True)
+        else:
+            st.info("💡 暫無可比較的支出數據。")
+    else:
+        st.info("💡 尚無記帳數據。")
 
     st.info(f"📋 共有 **{len(st.session_state.my_logs)}** 筆記錄，詳細請前往「📋 歷史收支明細」。")
 
@@ -683,7 +675,6 @@ if page_choice == "📊 財務總覽 & 預算監控":
 # ══════════════════════════════════════════════════════
 elif page_choice == "📋 歷史收支明細":
     st.subheader("📋 歷史收支明細")
-
     if "editing_index" not in st.session_state:
         st.session_state.editing_index = None
 
@@ -715,8 +706,8 @@ elif page_choice == "📋 歷史收支明細":
         custom_start = this_month_start; custom_end = date.today()
 
     sort_col1, sort_col2, export_col = st.columns([2, 2, 1])
-    with sort_col1: sort_by = st.selectbox("排序方式", ["日期", "類型", "分類", "金額"], key="sort_by")
-    with sort_col2: sort_order = st.radio("順序", ["新→舊 / 高→低", "舊→新 / 低→高"], key="sort_order", horizontal=True)
+    with sort_col1: sort_by = st.selectbox("排序方式", ["日期","類型","分類","金額"], key="sort_by")
+    with sort_col2: sort_order = st.radio("順序", ["新→舊 / 高→低","舊→新 / 低→高"], key="sort_order", horizontal=True)
     sort_ascending = sort_order == "舊→新 / 低→高"
 
     st.caption(f"目前篩選：**{st.session_state.filter_mode}**")
@@ -725,21 +716,14 @@ elif page_choice == "📋 歷史收支明細":
     logs = st.session_state.my_logs
     filtered_logs = []
     for i, log in enumerate(logs):
-        try:
-            log_date = datetime.strptime(str(log.get("日期", "")), "%Y/%m/%d").date()
-        except:
-            log_date = None
+        try: log_date = datetime.strptime(str(log.get("日期","")), "%Y/%m/%d").date()
+        except: log_date = None
         include = False
-        if st.session_state.filter_mode == "全部" or log_date is None:
-            include = True
-        elif st.session_state.filter_mode == "本月" and log_date and log_date >= this_month_start:
-            include = True
-        elif st.session_state.filter_mode == "上月" and log_date and last_month_start <= log_date <= last_month_end:
-            include = True
-        elif st.session_state.filter_mode == "自訂" and log_date and custom_start <= log_date <= custom_end:
-            include = True
-        if include:
-            filtered_logs.append((i, log, log_date))
+        if st.session_state.filter_mode == "全部" or log_date is None: include = True
+        elif st.session_state.filter_mode == "本月" and log_date and log_date >= this_month_start: include = True
+        elif st.session_state.filter_mode == "上月" and log_date and last_month_start <= log_date <= last_month_end: include = True
+        elif st.session_state.filter_mode == "自訂" and log_date and custom_start <= log_date <= custom_end: include = True
+        if include: filtered_logs.append((i, log, log_date))
 
     if sort_by == "日期": filtered_logs.sort(key=lambda x: x[2] or date.min, reverse=not sort_ascending)
     elif sort_by == "類型": filtered_logs.sort(key=lambda x: x[1].get("類型",""), reverse=not sort_ascending)
@@ -767,19 +751,14 @@ elif page_choice == "📋 歷史收支明細":
         h1.markdown("**日期**"); h2.markdown("**類型**"); h3.markdown("**分類**")
         h4.markdown("**項目**"); h5.markdown("**金額**"); h6.markdown("✏️"); h7.markdown("🗑️")
         st.markdown("---")
-
         for idx, (i, log, _) in enumerate(filtered_logs):
             col_date,col_type,col_cat,col_item,col_amt,col_edit,col_del = st.columns([1.2,1.2,1,1.5,1,0.5,0.5])
-            col_date.write(log.get("日期",""))
-            col_type.write(log.get("類型",""))
-            col_cat.write(log.get("分類",""))
-            col_item.write(log.get("項目",""))
+            col_date.write(log.get("日期","")); col_type.write(log.get("類型",""))
+            col_cat.write(log.get("分類","")); col_item.write(log.get("項目",""))
             col_amt.write(f'${log.get("金額",0):,.1f}')
-            if col_edit.button("✏️", key=f"edit_{i}_{idx}"):
-                st.session_state.editing_index = i
+            if col_edit.button("✏️", key=f"edit_{i}_{idx}"): st.session_state.editing_index = i
             if col_del.button("🗑️", key=f"del_{i}_{idx}"):
                 st.session_state.my_logs.pop(i); save_now(); st.success("✅ 已刪除"); st.rerun()
-
             if st.session_state.editing_index == i:
                 with st.form(key=f"edit_form_{i}_{idx}"):
                     st.markdown("**編輯記錄**")
@@ -815,18 +794,13 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
             in_date = st.date_input("日期", datetime.now())
             in_type = st.selectbox("交易類型", ["支出 💸","收入 📥"])
         with c2:
-            if in_type == "收入 📥":
-                in_cat = st.selectbox("分類", st.session_state.my_income_categories)
-            else:
-                in_cat = st.selectbox("分類", list(st.session_state.my_budget.keys()))
+            in_cat = st.selectbox("分類", st.session_state.my_income_categories if in_type=="收入 📥" else list(st.session_state.my_budget.keys()))
             in_subcat = st.text_input("子分類 (如：外食、零食)")
         with c3:
             in_title = st.text_input("項目名稱")
             in_amount = st.number_input("金額 ($)", min_value=0.0, step=1.0)
             in_acc = st.selectbox("帳戶", all_accs)
-
-        submit_btn = st.form_submit_button("確認記入 🚀")
-        if submit_btn and in_amount > 0:
+        if st.form_submit_button("確認記入 🚀") and in_amount > 0:
             if in_type == "收入 📥":
                 if in_acc in st.session_state.my_assets: st.session_state.my_assets[in_acc] += in_amount
                 if in_acc in st.session_state.my_liabilities: st.session_state.my_liabilities[in_acc] -= in_amount
@@ -837,16 +811,15 @@ elif page_choice == "💸 每日單筆記帳 (收/支)":
             save_now(); st.success(f"✅ 已記入：{in_title} ${in_amount}"); st.rerun()
 
 # ══════════════════════════════════════════════════════
-# 頁面 4: 投資持倉記錄（修正 FIFO）
+# 頁面 4: 投資持倉記錄
 # ══════════════════════════════════════════════════════
 elif page_choice == "📈 投資持倉記錄":
     st.subheader("📈 投資持倉記錄")
-    st.caption("交易記錄為唯一數據源 — FIFO 自動計算持倉（買入成本含手續費，賣出扣除手續費）")
+    st.caption("交易為唯一數據源 — FIFO自動計算 · 現價登入後持久保留")
 
     if "my_trades" not in st.session_state:
         st.session_state.my_trades = []
 
-    # 自動更新按鈕
     top_right_col = st.columns([3,1])[1]
     with top_right_col:
         if YFINANCE_AVAILABLE:
@@ -865,18 +838,19 @@ elif page_choice == "📈 投資持倉記錄":
                             else:
                                 failed.append(f"{h.get('名稱','')}（{ticker}）: {err}")
                         else:
-                            failed.append(f"{h.get('名稱','')}：無法識別 ticker，請在名稱前加股票代號如 `MU 美光`")
+                            failed.append(f"{h.get('名稱','')}：請在名稱前加代號，如 `MU 美光` 或 `6869 長飛`")
                 save_now()
                 if updated: st.success(f"✅ 更新 {updated} 筆")
                 for f in failed: st.warning(f"⚠️ {f}")
+        else:
+            st.info("安裝 `yfinance` 可啟用自動更新")
 
     tab1, tab2 = st.tabs(["📊 持倉總覽", "📋 交易記錄"])
 
-    # ── Tab1: 持倉總覽 ──
+    # ── Tab1 ──
     with tab1:
         if st.session_state.my_holdings:
             st.markdown("#### 🌐 總持倉總覽")
-
             usd_h = [h for h in st.session_state.my_holdings if h.get("幣別","USD") == "USD"]
             hkd_h = [h for h in st.session_state.my_holdings if h.get("幣別","USD") == "HKD"]
 
@@ -887,34 +861,37 @@ elif page_choice == "📈 投資持倉記錄":
 
             def mv(h): return float(h.get("市值") or 0)
             def pnl(h): return float(h.get("盈虧") or 0)
-            def cost_val(h): return float(h.get("數量") or 0) * float(h.get("平均成本") or 0)
+            def cv(h): return float(h.get("數量") or 0) * float(h.get("平均成本") or 0)
 
             if display_ccy == "HKD 港元":
                 sym = "HK$"
-                total_mv_disp = sum(mv(h) for h in hkd_h) + sum(mv(h) for h in usd_h) * usd_to_hkd
-                total_cost_disp = sum(cost_val(h) for h in hkd_h) + sum(cost_val(h) for h in usd_h) * usd_to_hkd
-                total_pnl_disp = sum(pnl(h) for h in hkd_h) + sum(pnl(h) for h in usd_h) * usd_to_hkd
+                total_mv_d = sum(mv(h) for h in hkd_h) + sum(mv(h) for h in usd_h)*usd_to_hkd
+                total_cost_d = sum(cv(h) for h in hkd_h) + sum(cv(h) for h in usd_h)*usd_to_hkd
+                total_pnl_d = sum(pnl(h) for h in hkd_h) + sum(pnl(h) for h in usd_h)*usd_to_hkd
+                note = f"（USD 部分以 {usd_to_hkd:.2f} 換算）"
             else:
                 sym = "USD $"
-                total_mv_disp = sum(mv(h) for h in usd_h) + sum(mv(h) for h in hkd_h) * hkd_to_usd
-                total_cost_disp = sum(cost_val(h) for h in usd_h) + sum(cost_val(h) for h in hkd_h) * hkd_to_usd
-                total_pnl_disp = sum(pnl(h) for h in usd_h) + sum(pnl(h) for h in hkd_h) * hkd_to_usd
+                total_mv_d = sum(mv(h) for h in usd_h) + sum(mv(h) for h in hkd_h)*hkd_to_usd
+                total_cost_d = sum(cv(h) for h in usd_h) + sum(cv(h) for h in hkd_h)*hkd_to_usd
+                total_pnl_d = sum(pnl(h) for h in usd_h) + sum(pnl(h) for h in hkd_h)*hkd_to_usd
+                note = f"（HKD 部分以 {hkd_to_usd:.4f} 換算）"
 
-            pnl_pct = (total_pnl_disp / total_cost_disp * 100) if total_cost_disp > 0 else 0.0
-            pnl_sign = "+" if total_pnl_disp >= 0 else ""
-
-            # 已實現盈虧
+            pnl_pct = (total_pnl_d / total_cost_d * 100) if total_cost_d > 0 else 0.0
             realized_map = get_realized_pnl_map(st.session_state.my_trades)
-            total_realized = sum(v * (usd_to_hkd if k[1]=="USD" and display_ccy=="HKD 港元" else hkd_to_usd if k[1]=="HKD" and display_ccy=="USD 美元" else 1) for k,v in realized_map.items())
+            total_realized = sum(
+                v * (usd_to_hkd if k.endswith(".HK") is False and display_ccy=="HKD 港元"
+                     else hkd_to_usd if display_ccy=="USD 美元" else 1)
+                for k,v in realized_map.items()
+            )
 
             t1,t2,t3,t4,t5 = st.columns(5)
-            t1.metric("💼 持倉市值", f"{sym}{total_mv_disp:,.2f}")
-            t2.metric("📊 持倉成本", f"{sym}{total_cost_disp:,.2f}")
-            t3.metric("💰 未實現盈虧", f"{sym}{total_pnl_disp:,.2f}", delta=f"{pnl_sign}{pnl_pct:.2f}%", delta_color="normal")
+            t1.metric("💼 持倉市值", f"{sym}{total_mv_d:,.2f}")
+            t2.metric("📊 持倉成本", f"{sym}{total_cost_d:,.2f}")
+            t3.metric("💰 未實現盈虧", f"{sym}{total_pnl_d:,.2f}", delta=f"{'+'if total_pnl_d>=0 else ''}{pnl_pct:.2f}%", delta_color="normal")
             t4.metric("✅ 已實現盈虧", f"{sym}{total_realized:,.2f}", delta_color="normal")
             t5.metric("📌 持倉數目", f"{len(st.session_state.my_holdings)} 隻")
+            st.caption(note)
 
-            # 圓餅圖
             pie_col1, pie_col2 = st.columns(2)
             usd_pie = pd.DataFrame([{"名稱":h["名稱"],"市值":mv(h)} for h in usd_h if mv(h)>0])
             hkd_pie = pd.DataFrame([{"名稱":h["名稱"],"市值":mv(h)} for h in hkd_h if mv(h)>0])
@@ -926,8 +903,7 @@ elif page_choice == "📈 投資持倉記錄":
                     fig_u.update_layout(template="plotly_dark", margin=dict(l=5,r=5,t=40,b=5))
                     fig_u.update_traces(textposition="inside", textinfo="percent+label")
                     st.plotly_chart(fig_u, use_container_width=True)
-                else:
-                    st.info("尚無美股持倉")
+                else: st.info("尚無美股持倉")
             with pie_col2:
                 if not hkd_pie.empty:
                     fig_h = px.pie(hkd_pie, values="市值", names="名稱", hole=0.45,
@@ -936,28 +912,25 @@ elif page_choice == "📈 投資持倉記錄":
                     fig_h.update_layout(template="plotly_dark", margin=dict(l=5,r=5,t=40,b=5))
                     fig_h.update_traces(textposition="inside", textinfo="percent+label")
                     st.plotly_chart(fig_h, use_container_width=True)
-                else:
-                    st.info("尚無港股持倉")
+                else: st.info("尚無港股持倉")
 
             st.markdown("---")
 
-            def render_holdings_group(h_list, ccy_sym, ccy_label):
-                if not h_list:
-                    st.info(f"尚無 {ccy_label} 持倉"); return
+            def render_group(h_list, ccy_sym, ccy_label):
+                if not h_list: st.info(f"尚無 {ccy_label} 持倉"); return
                 total_mv_g = sum(mv(h) for h in h_list)
                 total_pnl_g = sum(pnl(h) for h in h_list)
-                total_cost_g = sum(cost_val(h) for h in h_list)
-                pnl_pct_g = (total_pnl_g / total_cost_g * 100) if total_cost_g > 0 else 0.0
+                total_cv_g = sum(cv(h) for h in h_list)
+                pnl_pct_g = (total_pnl_g/total_cv_g*100) if total_cv_g > 0 else 0.0
                 sm1,sm2,sm3 = st.columns(3)
                 sm1.metric("💼 總市值", f"{ccy_sym}{total_mv_g:,.2f}")
-                sm2.metric("📊 總成本", f"{ccy_sym}{total_cost_g:,.2f}")
-                sm3.metric("💰 未實現盈虧", f"{ccy_sym}{total_pnl_g:,.2f}", delta=f"{'+'if total_pnl_g>=0 else ''}{pnl_pct_g:.2f}%", delta_color="normal")
-
+                sm2.metric("📊 總成本", f"{ccy_sym}{total_cv_g:,.2f}")
+                sm3.metric("💰 未實現盈虧", f"{ccy_sym}{total_pnl_g:,.2f}",
+                           delta=f"{'+'if total_pnl_g>=0 else ''}{pnl_pct_g:.2f}%", delta_color="normal")
                 hh1,hh2,hh3,hh4,hh5,hh6 = st.columns([2.5,1,1,1,1.5,1.2])
                 hh1.markdown("**名稱**"); hh2.markdown("**數量**"); hh3.markdown("**現價**")
                 hh4.markdown("**均成本**"); hh5.markdown("**未實現盈虧**"); hh6.markdown("**已實現盈虧**")
                 st.markdown("---")
-
                 for h in h_list:
                     c1,c2,c3,c4,c5,c6 = st.columns([2.5,1,1,1,1.5,1.2])
                     pnl_h = float(h.get("盈虧") or 0)
@@ -979,14 +952,15 @@ elif page_choice == "📈 投資持倉記錄":
                     st.divider()
 
             st.markdown("### 🇺🇸 美股 / USD")
-            render_holdings_group(usd_h, "USD $", "USD")
+            render_group(usd_h, "USD $", "USD")
             st.markdown("---")
             st.markdown("### 🇭🇰 港股 / HKD")
-            render_holdings_group(hkd_h, "HK$", "HKD")
+            render_group(hkd_h, "HK$", "HKD")
         else:
             st.info("💡 尚無持倉，請到「📋 交易記錄」tab 新增買入交易。")
+        st.caption("💡 持倉由交易記錄自動計算（FIFO），現價更新後登入仍可保留。")
 
-    # ── Tab2: 交易記錄 ──
+    # ── Tab2 ──
     with tab2:
         st.write("#### 📝 新增交易")
         with st.form("add_trade_form", clear_on_submit=True):
@@ -1002,25 +976,19 @@ elif page_choice == "📈 投資持倉記錄":
             with tr8: tr_note = st.text_input("備註", placeholder="可空白")
             is_buy = "買" in tr_type
             if tr_qty > 0 and tr_price > 0:
-                net_amt = tr_qty * tr_price + tr_fee if is_buy else tr_qty * tr_price - tr_fee
-                st.caption(f"💡 成交金額：{tr_qty*tr_price:,.2f}　手續費後淨額：{net_amt:,.2f}")
+                net_amt = tr_qty*tr_price + tr_fee if is_buy else tr_qty*tr_price - tr_fee
+                st.caption(f"💡 成交金額：{tr_qty*tr_price:,.2f}　淨額：{net_amt:,.2f}")
             if st.form_submit_button("✅ 確認記錄", use_container_width=True):
                 if tr_name.strip() and tr_qty > 0 and tr_price > 0:
                     tc = "USD" if tr_currency.startswith("USD") else "HKD"
                     net = tr_qty*tr_price + tr_fee if is_buy else tr_qty*tr_price - tr_fee
                     st.session_state.my_trades.append({
-                        "日期": tr_date.strftime("%Y/%m/%d"),
-                        "名稱": tr_name.strip(),
-                        "類型": "買入" if is_buy else "賣出",
-                        "幣別": tc,
-                        "數量": tr_qty,
-                        "成交價": tr_price,
-                        "手續費": tr_fee,
-                        "備註": tr_note,
-                        "成交金額": round(net, 4),
+                        "日期": tr_date.strftime("%Y/%m/%d"), "名稱": tr_name.strip(),
+                        "類型": "買入" if is_buy else "賣出", "幣別": tc,
+                        "數量": tr_qty, "成交價": tr_price, "手續費": tr_fee,
+                        "備註": tr_note, "成交金額": round(net, 4),
                     })
-                    save_now()
-                    refresh_holdings()
+                    save_now(); refresh_holdings()
                     st.success(f"✅ {'買入' if is_buy else '賣出'} {tr_name.strip()} × {tr_qty} @ {tr_price}")
                     st.rerun()
                 else:
@@ -1083,41 +1051,31 @@ elif page_choice == "🤖 AI 理財建議":
     st.subheader("🤖 AI 理財建議")
     st.caption("根據你的真實財務數據，由 Claude AI 提供個人化建議")
 
-    # 建立財務摘要給 AI
     _realized_map = get_realized_pnl_map(st.session_state.get("my_trades", []))
-    _total_realized_usd = sum(v for k,v in _realized_map.items() if k[1]=="USD")
-    _total_realized_hkd = sum(v for k,v in _realized_map.items() if k[1]=="HKD")
+    _total_realized_usd = sum(v for k,v in _realized_map.items() if k.endswith(".HK") is False and not k.startswith("0"))
+    _total_realized_hkd = sum(v for k,v in _realized_map.items() if k.endswith(".HK"))
 
-    holdings_summary_text = ""
+    holdings_text = ""
     for h in st.session_state.get("my_holdings", []):
         pnl_h = float(h.get("盈虧") or 0)
-        pnl_p = (pnl_h / (float(h.get("數量",0))*float(h.get("平均成本",1)))*100) if float(h.get("數量",0))*float(h.get("平均成本",1))>0 else 0
-        holdings_summary_text += f"- {h.get('名稱','')} ({h.get('幣別','USD')}): 持{float(h.get('數量',0)):,.2f}股 均成本{float(h.get('平均成本',0)):,.4f} 現價{float(h.get('現價',0)):,.2f} 未實現{'+'if pnl_h>=0 else ''}{pnl_h:,.2f} ({pnl_p:+.1f}%)\n"
+        qty = float(h.get("數量",0)); hc = float(h.get("平均成本",1))
+        pnl_p = (pnl_h/(qty*hc)*100) if qty*hc>0 else 0
+        holdings_text += f"- {h.get('名稱','')} ({h.get('幣別','USD')}): {qty:,.2f}股 均成本{hc:,.4f} 現價{float(h.get('現價',0)):,.2f} 未實現{'+'if pnl_h>=0 else ''}{pnl_h:,.2f} ({pnl_p:+.1f}%)\n"
 
-    fin_summary = f"""
-用戶財務狀況（港幣為主）：
-- 總資產：HK${total_assets:,.2f}
-- 總負債：HK${total_liabilities:,.2f}
-- 淨資產：HK${net_worth:,.2f}
-- 本月收入：${total_actual_income:,.2f}
-- 本月支出：${total_actual_expense:,.2f}
-- 儲蓄率：{savings_rate:.1f}%
-- 持倉市值（USD）：${_holdings_usd_mv:,.2f}
-- 持倉市值（HKD）：HK${_holdings_hkd_mv:,.2f}
-- 已實現盈虧（USD）：${_total_realized_usd:,.2f}
-- 已實現盈虧（HKD）：HK${_total_realized_hkd:,.2f}
+    fin_summary = f"""用戶財務狀況：
+- 總資產：HK${total_assets:,.2f} | 總負債：HK${total_liabilities:,.2f} | 淨資產：HK${net_worth:,.2f}
+- 本月收入：${total_actual_income:,.2f} | 本月支出：${total_actual_expense:,.2f} | 儲蓄率：{savings_rate:.1f}%
+- 持倉市值(USD)：${_holdings_usd_mv:,.2f} | 持倉市值(HKD)：HK${_holdings_hkd_mv:,.2f}
+- 已實現盈虧(USD)：${_total_realized_usd:,.2f} | 已實現盈虧(HKD)：HK${_total_realized_hkd:,.2f}
 - 負債比：{(total_liabilities/total_assets*100) if total_assets>0 else 0:.1f}%
-
 持倉明細：
-{holdings_summary_text if holdings_summary_text else "（尚無持倉）"}
-
-主要支出分類（本月）：
+{holdings_text if holdings_text else "（尚無持倉）"}
+主要支出（本月）：
 """ + "\n".join([f"- {k}：${v:,.2f}" for k,v in actual_spent_map.items() if v > 0])
 
-    ai_mode = st.radio("選擇建議類型", 
-        ["📊 整體財務健康評估", "💡 儲蓄改善建議", "📈 投資持倉分析", "🎯 月度預算優化"], 
+    ai_mode = st.radio("選擇建議類型",
+        ["📊 整體財務健康評估","💡 儲蓄改善建議","📈 投資持倉分析","🎯 月度預算優化"],
         horizontal=True)
-    
     custom_q = st.text_input("或輸入自訂問題（可空白）", placeholder="例如：我應該增持還是減持現有倉位？")
 
     if st.button("🤖 獲取 AI 建議", use_container_width=True):
@@ -1127,13 +1085,11 @@ elif page_choice == "🤖 AI 理財建議":
             "📈 投資持倉分析": "請根據以下持倉數據，分析投資組合的風險分佈、個股表現，並提供調倉或加減倉的參考建議。注意提醒這只是參考，非投資建議。請用繁體中文回答。",
             "🎯 月度預算優化": "請根據以下財務數據，為用戶制定一個更優化的月度預算分配方案，並解釋每個預算類別應佔收入的合理比例。請用繁體中文回答。"
         }
-        
         prompt = mode_prompts.get(ai_mode, "請分析以下財務狀況並提供建議。")
         if custom_q.strip():
             prompt = f"請用繁體中文回答以下問題：{custom_q.strip()}\n\n參考財務數據如下："
-        
         full_prompt = f"{prompt}\n\n{fin_summary}"
-        
+
         with st.spinner("🤖 AI 正在分析您的財務狀況…"):
             try:
                 response = requests.post(
@@ -1160,10 +1116,8 @@ elif page_choice == "🤖 AI 理財建議":
 # ══════════════════════════════════════════════════════
 elif page_choice == "📊 財務年度分析":
     st.subheader("📊 財務年度分析")
-
     now_dt = datetime.now()
-    year_options = list(range(now_dt.year, now_dt.year - 5, -1))
-    selected_year = st.selectbox("選擇年份", year_options, key="year_sel")
+    selected_year = st.selectbox("選擇年份", list(range(now_dt.year, now_dt.year-5, -1)), key="year_sel")
 
     if df_current_logs.empty:
         st.info("💡 尚無記帳數據。")
@@ -1180,50 +1134,38 @@ elif page_choice == "📊 財務年度分析":
             df_inc_yr = df_yr[is_inc_yr].groupby("月份")["金額"].sum().reindex(range(1,13), fill_value=0)
             df_exp_yr = df_yr[~is_inc_yr].groupby("月份")["金額"].sum().reindex(range(1,13), fill_value=0)
             df_sav_yr = df_inc_yr - df_exp_yr
-
             months = [f"{m}月" for m in range(1,13)]
 
-            # 年度統計
             y1,y2,y3,y4 = st.columns(4)
             y1.metric("💰 年度總收入", f"${df_inc_yr.sum():,.0f}")
             y2.metric("💸 年度總支出", f"${df_exp_yr.sum():,.0f}")
             y3.metric("📈 年度儲蓄", f"${df_sav_yr.sum():,.0f}")
-            avg_sav_rate = (df_sav_yr.sum() / df_inc_yr.sum() * 100) if df_inc_yr.sum() > 0 else 0
+            avg_sav_rate = (df_sav_yr.sum()/df_inc_yr.sum()*100) if df_inc_yr.sum()>0 else 0
             y4.metric("📊 平均儲蓄率", f"{avg_sav_rate:.1f}%")
-
             st.markdown("---")
 
-            # 月度收支柱狀圖
             st.markdown("#### 📅 月度收支概覽")
             fig_yr = go.Figure()
             fig_yr.add_trace(go.Bar(name="收入", x=months, y=df_inc_yr.values, marker_color="#1D9E75"))
             fig_yr.add_trace(go.Bar(name="支出", x=months, y=df_exp_yr.values, marker_color="#E24B4A"))
             fig_yr.add_trace(go.Scatter(name="儲蓄", x=months, y=df_sav_yr.values,
-                                        mode="lines+markers", line=dict(color="#3b82f6", width=2),
-                                        marker=dict(size=6)))
+                                         mode="lines+markers", line=dict(color="#3b82f6", width=2)))
             fig_yr.update_layout(template="plotly_dark", barmode="group",
                                   margin=dict(l=10,r=10,t=10,b=10),
                                   legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
             st.plotly_chart(fig_yr, use_container_width=True)
 
-            # 儲蓄率趨勢
             st.markdown("#### 📈 月度儲蓄率趨勢")
-            sav_rate_monthly = []
-            for m in range(1,13):
-                inc = df_inc_yr[m]; exp = df_exp_yr[m]
-                sav_rate_monthly.append((inc - exp) / inc * 100 if inc > 0 else 0)
+            sav_rate_monthly = [(df_inc_yr[m]-df_exp_yr[m])/df_inc_yr[m]*100 if df_inc_yr[m]>0 else 0 for m in range(1,13)]
             fig_sav = go.Figure()
             fig_sav.add_trace(go.Scatter(x=months, y=sav_rate_monthly, mode="lines+markers",
                                           line=dict(color="#00d4aa", width=2), fill="tozeroy",
                                           fillcolor="rgba(0,212,170,0.1)"))
-            fig_sav.add_hline(y=20, line_dash="dash", line_color="#EF9F27",
-                               annotation_text="建議儲蓄率 20%")
-            fig_sav.update_layout(template="plotly_dark", yaxis_title="儲蓄率 (%)",
-                                   margin=dict(l=10,r=10,t=10,b=10))
+            fig_sav.add_hline(y=20, line_dash="dash", line_color="#EF9F27", annotation_text="建議儲蓄率 20%")
+            fig_sav.update_layout(template="plotly_dark", yaxis_title="儲蓄率 (%)", margin=dict(l=10,r=10,t=10,b=10))
             st.plotly_chart(fig_sav, use_container_width=True)
 
-            # 年度支出分類
-            st.markdown("#### 📊 年度支出分類分析")
+            st.markdown("#### 📊 年度支出分類")
             exp_cat = df_yr[~is_inc_yr].groupby("分類")["金額"].sum().sort_values(ascending=False)
             if not exp_cat.empty:
                 col_pie, col_bar = st.columns(2)
@@ -1239,16 +1181,14 @@ elif page_choice == "📊 財務年度分析":
                                           margin=dict(l=10,r=10,t=10,b=10), yaxis_title="")
                     st.plotly_chart(fig_eb, use_container_width=True)
 
-            # 月度明細表
             st.markdown("#### 📋 月度明細")
-            detail_df = pd.DataFrame({
+            st.dataframe(pd.DataFrame({
                 "月份": months,
                 "收入": [f"${v:,.0f}" for v in df_inc_yr.values],
                 "支出": [f"${v:,.0f}" for v in df_exp_yr.values],
                 "儲蓄": [f"${v:,.0f}" for v in df_sav_yr.values],
                 "儲蓄率": [f"{r:.1f}%" for r in sav_rate_monthly],
-            })
-            st.dataframe(detail_df, use_container_width=True, hide_index=True)
+            }), use_container_width=True, hide_index=True)
 
 # ══════════════════════════════════════════════════════
 # 頁面 7: 批量上載
@@ -1301,7 +1241,6 @@ elif page_choice == "📤 批量上載 Excel/CSV 檔案":
 # ══════════════════════════════════════════════════════
 elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     st.subheader("⚙️ 個人化財務設定後台")
-
     col_btn1, col_btn2 = st.columns(2)
     with col_btn1:
         if st.button("🚨 清空所有記帳記錄", type="primary", use_container_width=True):
@@ -1322,10 +1261,11 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
                     st.session_state.my_income_categories.pop(idx); save_now(); st.rerun()
                 else:
                     st.warning("至少保留一個分類！")
-    new_cat = st.text_input("新增收入分類名稱")
+    new_cat = st.text_input("新增收入分類名稱", key="add_new_income_cat_input")
     if st.button("新增分類 🚀"):
         if new_cat.strip() and new_cat.strip() not in st.session_state.my_income_categories:
-            st.session_state.my_income_categories.append(new_cat.strip()); save_now(); st.success(f"✅ 已新增：{new_cat.strip()}"); st.rerun()
+            st.session_state.my_income_categories.append(new_cat.strip()); save_now()
+            st.success(f"✅ 已新增：{new_cat.strip()}"); st.rerun()
         else:
             st.warning("⚠️ 輸入無效或已存在！")
 
@@ -1337,10 +1277,11 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
             new_val = st.number_input(f"【{k}】", value=float(v), key=f"asset_input_{k}")
             if new_val != v: st.session_state.my_assets[k] = new_val; save_now()
         st.markdown("")
-        new_asset_name = st.text_input("新增資產帳戶名稱", key="new_asset_name")
+        new_asset_name = st.text_input("新增資產帳戶名稱", placeholder="例如：投資帳戶 📈", key="new_asset_name")
         if st.button("➕ 新增帳戶"):
             if new_asset_name.strip() and new_asset_name.strip() not in st.session_state.my_assets:
-                st.session_state.my_assets[new_asset_name.strip()] = 0.0; save_now(); st.success(f"✅ 已新增"); st.rerun()
+                st.session_state.my_assets[new_asset_name.strip()] = 0.0; save_now()
+                st.success(f"✅ 已新增"); st.rerun()
             else:
                 st.warning("⚠️ 名稱無效或已存在！")
         st.markdown("---")
