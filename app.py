@@ -66,9 +66,9 @@ def get_default_data():
         ],
         "trades": [],
         "holdings_prices": {},
-        "crypto_trades": [],
-        "crypto_holdings_prices": {},
-        "savings_goal": {"目標儲蓄率": 20.0, "目標月儲蓄額": 0.0}
+        "crypto_holdings": [],
+        "savings_goal": 0.0,
+        "savings_goal_name": "儲蓄目標"
     }
 
 # ==================== Page Config ====================
@@ -342,229 +342,6 @@ def get_realized_pnl_map(trades: list) -> dict:
             realized[key] += proceeds - cb
     return dict(realized)
 
-# ==================== 💹 加密資產（CoinGecko）====================
-CRYPTO_COIN_MAP = {
-    "BTC 比特幣": "bitcoin",
-    "ETH 以太幣": "ethereum",
-    "BNB 幣安幣": "binancecoin",
-    "SOL Solana": "solana",
-    "XRP 瑞波幣": "ripple",
-    "ADA Cardano": "cardano",
-    "DOGE 狗狗幣": "dogecoin",
-    "TON Toncoin": "the-open-network",
-    "AVAX Avalanche": "avalanche-2",
-    "LINK Chainlink": "chainlink",
-    "MATIC Polygon": "matic-network",
-    "DOT Polkadot": "polkadot",
-    "LTC Litecoin": "litecoin",
-    "TRX TRON": "tron",
-    "SHIB 柴犬幣": "shiba-inu",
-    "USDT 泰達幣": "tether",
-    "USDC": "usd-coin",
-}
-
-def fetch_crypto_prices(coin_ids: list, vs_currency: str = "usd") -> dict:
-    """批量取得 CoinGecko 即時價格，回傳 {coin_id: price}"""
-    if not coin_ids:
-        return {}
-    try:
-        ids_param = ",".join(sorted(set(coin_ids)))
-        r = requests.get(
-            "https://api.coingecko.com/api/v3/simple/price",
-            params={"ids": ids_param, "vs_currencies": vs_currency},
-            timeout=15,
-        )
-        data = r.json()
-        return {cid: float(v[vs_currency]) for cid, v in data.items() if vs_currency in v}
-    except Exception:
-        return {}
-
-def compute_crypto_holdings_from_trades(trades: list) -> list:
-    """FIFO 加密貨幣持倉計算（以 USD 計價）"""
-    from collections import defaultdict
-
-    sorted_trades = sorted(enumerate(trades), key=lambda x: (x[1].get("日期", ""), x[0]))
-    sorted_trades = [t for _, t in sorted_trades]
-
-    lots = defaultdict(list)
-    realized_pnl = defaultdict(float)
-    display_symbol = {}
-
-    for tr in sorted_trades:
-        coin_id = tr.get("coingecko_id", "")
-        symbol  = tr.get("幣種", coin_id)
-        qty     = float(tr.get("數量") or 0)
-        price   = float(tr.get("成交價") or 0)
-        fee     = float(tr.get("手續費") or 0)
-        ttype   = tr.get("類型", "買入")
-
-        if qty <= 0 or price <= 0 or not coin_id:
-            continue
-
-        display_symbol.setdefault(coin_id, symbol)
-
-        if ttype == "買入":
-            cost_per_unit = (qty * price + fee) / qty
-            lots[coin_id].append({"qty": qty, "cost": cost_per_unit})
-        elif ttype == "賣出":
-            proceeds = qty * price - fee
-            remaining = qty
-            sell_cost = 0.0
-            while remaining > 1e-9 and lots[coin_id]:
-                oldest = lots[coin_id][0]
-                if oldest["qty"] <= remaining + 1e-9:
-                    sell_cost += oldest["qty"] * oldest["cost"]
-                    remaining -= oldest["qty"]
-                    lots[coin_id].pop(0)
-                else:
-                    sell_cost += remaining * oldest["cost"]
-                    oldest["qty"] -= remaining
-                    remaining = 0.0
-            realized_pnl[coin_id] += proceeds - sell_cost
-
-    holdings = []
-    for coin_id, lot_list in lots.items():
-        total_qty = sum(l["qty"] for l in lot_list)
-        if total_qty < 1e-9:
-            continue
-        total_cost_val = sum(l["qty"] * l["cost"] for l in lot_list)
-        avg_cost = total_cost_val / total_qty
-        holdings.append({
-            "幣種": display_symbol.get(coin_id, coin_id),
-            "coingecko_id": coin_id,
-            "數量": round(total_qty, 8),
-            "現價": 0.0,
-            "平均成本": round(avg_cost, 6),
-            "市值": 0.0,
-            "盈虧": 0.0,
-            "已實現盈虧": round(realized_pnl.get(coin_id, 0.0), 4),
-        })
-    return holdings
-
-def get_crypto_realized_pnl_map(trades: list) -> dict:
-    from collections import defaultdict
-    sorted_trades = sorted(enumerate(trades), key=lambda x: (x[1].get("日期", ""), x[0]))
-    sorted_trades = [t for _, t in sorted_trades]
-    lots = defaultdict(list)
-    realized = defaultdict(float)
-    for tr in sorted_trades:
-        coin_id = tr.get("coingecko_id", "")
-        qty   = float(tr.get("數量") or 0)
-        price = float(tr.get("成交價") or 0)
-        fee   = float(tr.get("手續費") or 0)
-        ttype = tr.get("類型", "買入")
-        if qty <= 0 or price <= 0 or not coin_id:
-            continue
-        if ttype == "買入":
-            lots[coin_id].append({"qty": qty, "cost": (qty * price + fee) / qty})
-        elif ttype == "賣出":
-            proceeds = qty * price - fee
-            rem = qty; cb = 0.0
-            while rem > 1e-9 and lots[coin_id]:
-                ol = lots[coin_id][0]
-                if ol["qty"] <= rem + 1e-9:
-                    cb += ol["qty"] * ol["cost"]; rem -= ol["qty"]; lots[coin_id].pop(0)
-                else:
-                    cb += rem * ol["cost"]; ol["qty"] -= rem; rem = 0.0
-            realized[coin_id] += proceeds - cb
-    return dict(realized)
-
-# ==================== 💱 多幣別匯率自動更新 ====================
-FX_SYMBOLS = ["HKD", "CNY", "EUR", "GBP", "JPY", "AUD", "CAD", "SGD"]
-FX_FALLBACK = {"USD": 1.0, "HKD": 7.80, "CNY": 7.25, "EUR": 0.92, "GBP": 0.79,
-               "JPY": 156.0, "AUD": 1.52, "CAD": 1.37, "SGD": 1.35}
-
-def fetch_fx_rates(base: str = "USD", symbols=None):
-    """使用 Frankfurter（歐洲央行）免費 API 取得即時匯率，回傳 (rates, 資料日期)"""
-    symbols = symbols or FX_SYMBOLS
-    try:
-        r = requests.get(
-            "https://api.frankfurter.app/latest",
-            params={"from": base, "to": ",".join(symbols)},
-            timeout=10,
-        )
-        data = r.json()
-        rates = data.get("rates", {})
-        if not rates:
-            return None, None
-        rates[base] = 1.0
-        return rates, data.get("date")
-    except Exception:
-        return None, None
-
-def get_fx_rates(force: bool = False) -> dict:
-    """取得快取匯率（每日自動更新一次），格式：{"rates":{...}, "date":"YYYY-MM-DD", "src_date":...}"""
-    today_str = date.today().isoformat()
-    cache = st.session_state.get("fx_cache", {})
-    if force or cache.get("date") != today_str or not cache.get("rates"):
-        rates, fx_date = fetch_fx_rates("USD")
-        if rates:
-            st.session_state.fx_cache = {"rates": rates, "date": today_str, "src_date": fx_date}
-        elif not cache.get("rates"):
-            st.session_state.fx_cache = {"rates": dict(FX_FALLBACK), "date": today_str, "src_date": "預設值（離線）"}
-    return st.session_state.fx_cache
-
-# ==================== 📊 收支預測（過去平均）====================
-def compute_monthly_averages(df_logs: pd.DataFrame, lookback_months: int = 6):
-    """回傳 (平均月收入, 平均月支出, {分類:平均月支出}, 採樣月數)"""
-    if df_logs.empty:
-        return 0.0, 0.0, {}, 0
-    df = df_logs.copy()
-    df["日期_dt"] = pd.to_datetime(df["日期"], errors="coerce")
-    df = df.dropna(subset=["日期_dt"])
-    if df.empty:
-        return 0.0, 0.0, {}, 0
-    cutoff = datetime.now() - pd.DateOffset(months=lookback_months)
-    df = df[df["日期_dt"] >= cutoff]
-    if df.empty:
-        return 0.0, 0.0, {}, 0
-    df["金額"] = pd.to_numeric(df["金額"], errors="coerce").fillna(0.0)
-    df["年月"] = df["日期_dt"].dt.to_period("M")
-    is_inc = (df["類型"] == "收入 📥") | (df["分類"] == "收入")
-    months_present = max(df["年月"].nunique(), 1)
-
-    avg_income = float(df[is_inc]["金額"].sum()) / months_present
-    df_exp = df[~is_inc]
-    avg_expense = float(df_exp["金額"].sum()) / months_present
-    avg_by_cat = (df_exp.groupby("分類")["金額"].sum() / months_present).to_dict()
-    return avg_income, avg_expense, avg_by_cat, months_present
-
-# ==================== 🔔 智能提醒（預算超支 + 儲蓄目標）====================
-def get_budget_alerts(actual_spent_map: dict, budget: dict) -> list:
-    """回傳 [(等級, 訊息), ...]，等級為 error / warning"""
-    alerts = []
-    for cat, b_amount in budget.items():
-        b_amount = float(b_amount or 0)
-        if b_amount <= 0:
-            continue
-        a_amount = float(actual_spent_map.get(cat, 0.0))
-        rate = a_amount / b_amount * 100
-        if rate >= 100:
-            alerts.append(("error", f"🔴 **{cat}** 已超支！已用 ${a_amount:,.0f} / ${b_amount:,.0f}（{rate:.0f}%）"))
-        elif rate >= 80:
-            alerts.append(("warning", f"🟡 **{cat}** 即將超支，已用 ${a_amount:,.0f} / ${b_amount:,.0f}（{rate:.0f}%）"))
-    return alerts
-
-def get_savings_goal_alerts(savings_rate: float, expected_savings: float, goal: dict) -> list:
-    """根據儲蓄目標設定回傳提醒"""
-    alerts = []
-    target_rate = float(goal.get("目標儲蓄率", 0) or 0)
-    target_amount = float(goal.get("目標月儲蓄額", 0) or 0)
-
-    if target_rate > 0:
-        if savings_rate < target_rate:
-            alerts.append(("warning", f"📉 本月儲蓄率 **{savings_rate:.1f}%** 低於目標 **{target_rate:.1f}%**，建議檢視支出結構。"))
-        else:
-            alerts.append(("success", f"🎉 本月儲蓄率 **{savings_rate:.1f}%** 已達標（目標 {target_rate:.1f}%）！"))
-
-    if target_amount > 0:
-        if expected_savings < target_amount:
-            diff = target_amount - expected_savings
-            alerts.append(("warning", f"💰 距離本月儲蓄目標 **${target_amount:,.0f}** 還差 **${diff:,.0f}**。"))
-        else:
-            alerts.append(("success", f"✅ 本月儲蓄 **${expected_savings:,.0f}** 已達成目標 **${target_amount:,.0f}**！"))
-    return alerts
-
 # ==================== 登入狀態 ====================
 if "uid" not in st.session_state:
     st.session_state.uid = None
@@ -588,10 +365,9 @@ if st.session_state.uid is None:
             st.session_state.my_holdings = []
             st.session_state.my_trades = data.get("trades", [])
             st.session_state.my_holdings_prices = data.get("holdings_prices", {})
-            st.session_state.my_crypto_trades = data.get("crypto_trades", [])
-            st.session_state.my_crypto_holdings = []
-            st.session_state.my_crypto_holdings_prices = data.get("crypto_holdings_prices", {})
-            st.session_state.my_savings_goal = data.get("savings_goal", {"目標儲蓄率": 20.0, "目標月儲蓄額": 0.0})
+            st.session_state.my_crypto = data.get("crypto_holdings", [])
+            st.session_state.my_savings_goal = float(data.get("savings_goal", 0.0))
+            st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
 
 # ==================== 登入/註冊 ====================
 if st.session_state.uid is None:
@@ -621,10 +397,9 @@ if st.session_state.uid is None:
                     st.session_state.my_holdings = []
                     st.session_state.my_trades = data.get("trades", [])
                     st.session_state.my_holdings_prices = data.get("holdings_prices", {})
-                    st.session_state.my_crypto_trades = data.get("crypto_trades", [])
-                    st.session_state.my_crypto_holdings = []
-                    st.session_state.my_crypto_holdings_prices = data.get("crypto_holdings_prices", {})
-                    st.session_state.my_savings_goal = data.get("savings_goal", {"目標儲蓄率": 20.0, "目標月儲蓄額": 0.0})
+                    st.session_state.my_crypto = data.get("crypto_holdings", [])
+                    st.session_state.my_savings_goal = float(data.get("savings_goal", 0.0))
+                    st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
@@ -661,10 +436,9 @@ if st.session_state.uid is None:
                     st.session_state.my_holdings = []
                     st.session_state.my_trades = []
                     st.session_state.my_holdings_prices = {}
-                    st.session_state.my_crypto_trades = []
-                    st.session_state.my_crypto_holdings = []
-                    st.session_state.my_crypto_holdings_prices = {}
-                    st.session_state.my_savings_goal = data["savings_goal"]
+                    st.session_state.my_crypto = []
+                    st.session_state.my_savings_goal = 0.0
+                    st.session_state.my_savings_goal_name = "儲蓄目標"
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
@@ -680,11 +454,6 @@ def save_now():
         for h in st.session_state.get("my_holdings", [])
         if float(h.get("現價") or 0) > 0
     }
-    crypto_prices_map = {
-        h.get("coingecko_id", h.get("幣種","")): float(h.get("現價") or 0)
-        for h in st.session_state.get("my_crypto_holdings", [])
-        if float(h.get("現價") or 0) > 0
-    }
     save_user_data(st.session_state.uid, {
         "assets": st.session_state.my_assets,
         "liabilities": st.session_state.my_liabilities,
@@ -693,9 +462,9 @@ def save_now():
         "logs": st.session_state.my_logs,
         "trades": st.session_state.get("my_trades", []),
         "holdings_prices": prices_map,
-        "crypto_trades": st.session_state.get("my_crypto_trades", []),
-        "crypto_holdings_prices": crypto_prices_map,
-        "savings_goal": st.session_state.get("my_savings_goal", {"目標儲蓄率": 20.0, "目標月儲蓄額": 0.0}),
+        "crypto_holdings": st.session_state.get("my_crypto", []),
+        "savings_goal": st.session_state.get("my_savings_goal", 0.0),
+        "savings_goal_name": st.session_state.get("my_savings_goal_name", "儲蓄目標"),
     })
 
 # ==================== refresh_holdings（保留現價）====================
@@ -718,43 +487,26 @@ def refresh_holdings():
             h["盈虧"] = round(h["數量"] * (old_p - h["平均成本"]), 4)
     st.session_state.my_holdings = computed
 
-# ==================== refresh_crypto_holdings（保留現價）====================
-def refresh_crypto_holdings():
-    computed = compute_crypto_holdings_from_trades(st.session_state.get("my_crypto_trades", []))
-    session_prices = {
-        h.get("coingecko_id", ""): float(h.get("現價") or 0)
-        for h in st.session_state.get("my_crypto_holdings", [])
-    }
-    saved_prices = st.session_state.get("my_crypto_holdings_prices", {})
-
-    for h in computed:
-        cid = h.get("coingecko_id", "")
-        old_p = session_prices.get(cid, 0.0) or float(saved_prices.get(cid, 0))
-        if old_p > 0:
-            h["現價"] = old_p
-            h["市值"] = round(h["數量"] * old_p, 6)
-            h["盈虧"] = round(h["數量"] * (old_p - h["平均成本"]), 6)
-    st.session_state.my_crypto_holdings = computed
-
 refresh_holdings()
-refresh_crypto_holdings()
+
+# ==================== 新功能 Session State 初始化 ====================
+if "my_crypto" not in st.session_state:
+    st.session_state.my_crypto = []
+if "my_savings_goal" not in st.session_state:
+    st.session_state.my_savings_goal = 0.0
+if "my_savings_goal_name" not in st.session_state:
+    st.session_state.my_savings_goal_name = "儲蓄目標"
 
 # ==================== 核心財務計算 ====================
 total_assets = sum(st.session_state.my_assets.values())
 total_liabilities = sum(st.session_state.my_liabilities.values())
 
 _holdings = st.session_state.get("my_holdings", [])
-_fx_data = get_fx_rates()
-_fx = float(_fx_data["rates"].get("HKD", 7.80))
+_fx = 7.80
 _holdings_usd_mv = sum(float(h.get("市值") or 0) for h in _holdings if h.get("幣別","USD") == "USD")
 _holdings_hkd_mv = sum(float(h.get("市值") or 0) for h in _holdings if h.get("幣別","USD") == "HKD")
 holdings_total_value = _holdings_usd_mv * _fx + _holdings_hkd_mv
-
-_crypto_holdings = st.session_state.get("my_crypto_holdings", [])
-_crypto_usd_mv = sum(float(h.get("市值") or 0) for h in _crypto_holdings)
-crypto_total_value_hkd = _crypto_usd_mv * _fx
-
-net_worth = total_assets - total_liabilities + holdings_total_value + crypto_total_value_hkd
+net_worth = total_assets - total_liabilities + holdings_total_value
 
 df_current_logs = pd.DataFrame(st.session_state.my_logs) if st.session_state.my_logs else pd.DataFrame()
 total_actual_income = 0.0
@@ -788,7 +540,7 @@ def fmt(val: float, prefix: str = "$") -> str:
 
 # ==================== 頁面標題 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
-st.caption("🚀 雲端收支全功能 — FIFO持倉 · 加密資產 · 智能提醒 · 收支預測 · 多幣別匯率 · AI理財建議 · iPad/手機優化")
+st.caption("🚀 雲端收支全功能 — FIFO持倉 · 加密資產 · 智能提醒 · 收支預測 · 多幣別匯率 · AI理財建議")
 
 col_title, col_logout = st.columns([4, 1])
 with col_logout:
@@ -797,9 +549,7 @@ with col_logout:
         st.query_params.clear()
         for key in ["uid", "user_email", "my_assets", "my_liabilities",
                     "my_budget", "my_income_categories", "my_logs",
-                    "my_trades", "my_holdings", "my_holdings_prices",
-                    "my_crypto_trades", "my_crypto_holdings", "my_crypto_holdings_prices",
-                    "my_savings_goal", "fx_cache", "filter_mode", "editing_index"]:
+                    "my_trades", "my_holdings", "my_holdings_prices"]:
             if key in st.session_state:
                 del st.session_state[key]
         st.rerun()
@@ -810,12 +560,7 @@ m_col1, m_col2, m_col3, m_col4 = st.columns(4)
 m_col1.metric("💰 本月收入", fmt(total_actual_income))
 m_col2.metric("💸 本月支出", fmt(total_actual_expense))
 m_col3.metric("📈 預計儲蓄", fmt(expected_savings), delta=f"儲蓄率 {savings_rate:.1f}%")
-_nw_delta_parts = []
-if holdings_total_value > 0:
-    _nw_delta_parts.append(f"股票 {fmt(holdings_total_value,'HK$')}")
-if crypto_total_value_hkd > 0:
-    _nw_delta_parts.append(f"加密 {fmt(crypto_total_value_hkd,'HK$')}")
-_nw_delta = " · ".join(_nw_delta_parts) if _nw_delta_parts else None
+_nw_delta = f"含持倉 {fmt(holdings_total_value,'HK$')}" if holdings_total_value > 0 else None
 m_col4.metric("👑 淨身家", fmt(net_worth, "HK$"), delta=_nw_delta)
 
 st.markdown("")
@@ -831,36 +576,7 @@ _net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD
 m2_col4.metric("💹 持倉盈虧", fmt(_net_pnl, "HK$"),
                delta=f"{'+'if _net_pnl>=0 else ''}{fmt(abs(_net_pnl),'')}",
                delta_color="normal")
-
-st.markdown("")
-m3_col1, m3_col2, m3_col3, m3_col4 = st.columns(4)
-_crypto_pnl_hkd = sum(float(h.get("盈虧") or 0) for h in _crypto_holdings) * _fx
-m3_col1.metric("💎 加密資產市值", fmt(crypto_total_value_hkd, "HK$"),
-               delta=f"US${fmt(_crypto_usd_mv)}" if _crypto_holdings else None,
-               delta_color="off")
-m3_col2.metric("💹 加密盈虧", fmt(_crypto_pnl_hkd, "HK$"),
-               delta=f"{'+'if _crypto_pnl_hkd>=0 else ''}{fmt(abs(_crypto_pnl_hkd),'')}" if _crypto_holdings else None,
-               delta_color="normal")
-m3_col3.metric("💱 USD/HKD", f"{_fx:.3f}", delta=f"更新：{_fx_data.get('src_date','—')}", delta_color="off")
-_cny_rate = _fx_data["rates"].get("CNY")
-m3_col4.metric("💱 USD/CNY", f"{_cny_rate:.3f}" if _cny_rate else "—", delta_color="off")
-
 st.markdown("---")
-
-# ==================== 🔔 智能提醒橫幅 ====================
-_alerts = get_budget_alerts(actual_spent_map, st.session_state.my_budget) + \
-          get_savings_goal_alerts(savings_rate, expected_savings, st.session_state.get("my_savings_goal", {}))
-if _alerts:
-    _has_error = any(lvl == "error" for lvl, _ in _alerts)
-    with st.expander(f"🔔 智能提醒（{len(_alerts)} 項）", expanded=_has_error):
-        for level, msg in _alerts:
-            if level == "error":
-                st.error(msg)
-            elif level == "warning":
-                st.warning(msg)
-            else:
-                st.success(msg)
-    st.markdown("---")
 
 # ==================== 側邊欄 ====================
 st.sidebar.title("Menu 功能選單")
@@ -869,8 +585,10 @@ page_choice = st.sidebar.radio("切換功能頁面", [
     "📋 歷史收支明細",
     "💸 每日單筆記帳 (收/支)",
     "📈 投資持倉記錄",
-    "💎 加密資產持倉",
-    "📊 收支預測 (未來3月)",
+    "💹 加密資產持倉",
+    "🔔 智能提醒中心",
+    "📉 未來3月收支預測",
+    "💱 多幣別匯率",
     "🤖 AI 理財建議",
     "📊 財務年度分析",
     "📤 批量上載 Excel/CSV 檔案",
@@ -878,19 +596,6 @@ page_choice = st.sidebar.radio("切換功能頁面", [
 ])
 st.sidebar.markdown("---")
 st.sidebar.info("💡 數據已雲端儲存，刷新頁面不會消失！")
-
-# ── 💱 即時匯率（多幣別自動更新）──
-with st.sidebar.expander("💱 即時匯率", expanded=False):
-    _fx_rates = _fx_data.get("rates", {})
-    _fx_src = _fx_data.get("src_date", "—")
-    st.caption(f"基準：USD　資料日期：{_fx_src}")
-    for _sym in ["HKD", "CNY", "EUR", "GBP", "JPY"]:
-        _rv = _fx_rates.get(_sym)
-        if _rv:
-            st.write(f"USD/{_sym}　**{_rv:,.4f}**")
-    if st.button("🔄 立即更新匯率", use_container_width=True, key="fx_refresh_sidebar"):
-        get_fx_rates(force=True)
-        st.rerun()
 
 all_accs = list(st.session_state.my_assets.keys()) + list(st.session_state.my_liabilities.keys())
 if not all_accs:
@@ -1214,6 +919,66 @@ elif page_choice == "📈 投資持倉記錄":
             t5.metric("📌 持倉數目", f"{len(st.session_state.my_holdings)} 隻")
             st.caption(note)
 
+            # ══ 同步資產帳戶 ══
+            st.markdown("---")
+            st.markdown("#### 🏦 同步入資產帳戶")
+            st.caption("將買入股本 / 賣出所得 / 持倉市值自動反映到資產帳戶，避免重複計算。")
+
+            # 計算各項數值（全部轉 HKD）
+            all_trades = st.session_state.get("my_trades", [])
+            sync_fx = usd_to_hkd
+
+            total_buy_hkd = sum(
+                float(t.get("成交金額",0)) * (sync_fx if t.get("幣別","USD") == "USD" else 1)
+                for t in all_trades if t.get("類型","") == "買入"
+            )
+            total_sell_hkd = sum(
+                float(t.get("成交金額",0)) * (sync_fx if t.get("幣別","USD") == "USD" else 1)
+                for t in all_trades if t.get("類型","") == "賣出"
+            )
+            net_cash_from_trades = total_sell_hkd - total_buy_hkd  # 扣成本後淨現金流
+            holdings_mv_hkd = (
+                sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="USD") * sync_fx
+                + sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="HKD")
+            )
+
+            sa1, sa2, sa3 = st.columns(3)
+            sa1.metric("📥 賣出所得（累計 HKD）", f"HK${total_sell_hkd:,.2f}", help="所有賣出交易的總收款")
+            sa2.metric("📤 買入股本（累計 HKD）", f"HK${total_buy_hkd:,.2f}", help="所有買入交易的總投入")
+            sa3.metric("💹 現持倉市值（HKD）", f"HK${holdings_mv_hkd:,.2f}", help="按最新現價計算")
+
+            st.markdown("")
+            asset_accs = list(st.session_state.my_assets.keys())
+            if not asset_accs:
+                st.warning("⚠️ 尚未設定資產帳戶，請到「⚙️ 自訂資產/預算初始值」新增帳戶。")
+            else:
+                sync_col1, sync_col2 = st.columns(2)
+                with sync_col1:
+                    target_acc_sell = st.selectbox("賣出所得存入帳戶", asset_accs, key="sync_sell_acc")
+                    if st.button("💰 將賣出所得同步入帳戶", use_container_width=True, key="btn_sync_sell"):
+                        st.session_state.my_assets[target_acc_sell] = float(
+                            st.session_state.my_assets.get(target_acc_sell, 0)
+                        ) + total_sell_hkd
+                        save_now()
+                        st.success(f"✅ 已將賣出所得 HK${total_sell_hkd:,.2f} 加入【{target_acc_sell}】")
+                        st.rerun()
+
+                with sync_col2:
+                    target_acc_mv = st.selectbox("持倉市值同步至帳戶", asset_accs, key="sync_mv_acc")
+                    if st.button("📊 將現持倉市值同步入帳戶", use_container_width=True, key="btn_sync_mv"):
+                        st.session_state.my_assets[target_acc_mv] = holdings_mv_hkd
+                        save_now()
+                        st.success(f"✅ 已將持倉市值 HK${holdings_mv_hkd:,.2f} 設定至【{target_acc_mv}】（覆蓋舊值）")
+                        st.rerun()
+
+                st.info("""
+💡 **使用提示**：
+- **賣出所得同步**：累加賣出現金到帳戶（如銀行儲蓄），適合記錄套現所得。
+- **持倉市值同步**：直接將帳戶餘額更新為現持倉市值（覆蓋），適合「投資帳戶 📈」欄位。
+- 建議設立獨立「投資帳戶 📈」帳戶，避免與日常現金混淆。
+                """)
+            st.markdown("---")
+
             pie_col1, pie_col2 = st.columns(2)
             usd_pie = pd.DataFrame([{"名稱":h["名稱"],"市值":mv(h)} for h in usd_h if mv(h)>0])
             hkd_pie = pd.DataFrame([{"名稱":h["名稱"],"市值":mv(h)} for h in hkd_h if mv(h)>0])
@@ -1367,303 +1132,437 @@ elif page_choice == "📈 投資持倉記錄":
             st.info("💡 尚無交易記錄，填寫上方表單加入。")
 
 # ══════════════════════════════════════════════════════
-# 頁面 4.1: 💎 加密資產持倉（CoinGecko）
+# 頁面 5: 加密資產持倉
 # ══════════════════════════════════════════════════════
-elif page_choice == "💎 加密資產持倉":
-    st.subheader("💎 加密資產持倉")
-    st.caption("即時價格由 CoinGecko API 提供 · FIFO 自動計算 · 現價登入後持久保留")
+elif page_choice == "💹 加密資產持倉":
+    st.subheader("💹 加密資產持倉")
+    st.caption("由 CoinGecko API 自動獲取即時幣價 · 無需 API Key")
 
-    if "my_crypto_trades" not in st.session_state:
-        st.session_state.my_crypto_trades = []
-    if "my_crypto_holdings" not in st.session_state:
-        st.session_state.my_crypto_holdings = []
+    if "my_crypto" not in st.session_state:
+        st.session_state.my_crypto = []
 
-    top_right_col = st.columns([3, 1])[1]
-    with top_right_col:
-        if st.button("🔄 自動更新加密貨幣價格", use_container_width=True, key="crypto_refresh_btn"):
-            coin_ids = [h.get("coingecko_id") for h in st.session_state.my_crypto_holdings if h.get("coingecko_id")]
-            with st.spinner("正在從 CoinGecko 抓取價格…"):
-                prices = fetch_crypto_prices(coin_ids)
-            if prices:
-                for h in st.session_state.my_crypto_holdings:
-                    cid = h.get("coingecko_id")
-                    if cid in prices:
-                        p = prices[cid]
-                        qty = float(h.get("數量") or 0)
-                        cost = float(h.get("平均成本") or 0)
-                        h["現價"] = p
-                        h["市值"] = round(qty * p, 6)
-                        h["盈虧"] = round(qty * (p - cost), 6)
+    def fetch_crypto_prices(coin_ids: list) -> dict:
+        """使用 CoinGecko 免費 API 批量獲取幣價（USD）"""
+        if not coin_ids:
+            return {}
+        try:
+            ids_str = ",".join(coin_ids)
+            url = f"https://api.coingecko.com/api/v3/simple/price?ids={ids_str}&vs_currencies=usd,hkd&include_24hr_change=true"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                return r.json()
+        except Exception:
+            pass
+        return {}
+
+    COIN_LIST = {
+        "Bitcoin": "bitcoin", "Ethereum": "ethereum", "BNB": "binancecoin",
+        "Solana": "solana", "XRP": "ripple", "USDT": "tether", "USDC": "usd-coin",
+        "Cardano": "cardano", "Avalanche": "avalanche-2", "Dogecoin": "dogecoin",
+        "Polkadot": "polkadot", "Chainlink": "chainlink", "Litecoin": "litecoin",
+        "Uniswap": "uniswap", "Polygon": "matic-network", "自訂幣種": "__custom__"
+    }
+
+    st.markdown("#### ➕ 新增加密貨幣持倉")
+    with st.form("add_crypto_form", clear_on_submit=True):
+        c1, c2, c3, c4 = st.columns([2,1.5,1.5,1])
+        with c1:
+            coin_select = st.selectbox("選擇幣種", list(COIN_LIST.keys()))
+            custom_id = st.text_input("自訂 CoinGecko ID（選自訂時填寫）", placeholder="例如：shiba-inu")
+        with c2:
+            crypto_qty = st.number_input("持倉數量", min_value=0.0, step=0.0001, format="%.6f")
+        with c3:
+            crypto_cost = st.number_input("平均成本 (USD)", min_value=0.0, step=0.01)
+        with c4:
+            crypto_ccy = st.selectbox("計價幣別", ["USD", "HKD"])
+        if st.form_submit_button("✅ 新增持倉", use_container_width=True):
+            if crypto_qty > 0 and crypto_cost >= 0:
+                coin_id = custom_id.strip() if coin_select == "自訂幣種" else COIN_LIST[coin_select]
+                coin_name = custom_id.strip() if coin_select == "自訂幣種" else coin_select
+                st.session_state.my_crypto.append({
+                    "名稱": coin_name, "coin_id": coin_id,
+                    "數量": crypto_qty, "平均成本_USD": crypto_cost,
+                    "幣別": crypto_ccy, "現價_USD": 0.0, "現價_HKD": 0.0,
+                })
                 save_now()
-                st.success(f"✅ 已更新 {len(prices)} 種幣價")
+                st.success(f"✅ 已新增 {coin_name} × {crypto_qty}")
+                st.rerun()
+
+    if st.session_state.my_crypto:
+        st.markdown("---")
+        if st.button("🔄 更新全部幣價（CoinGecko）", use_container_width=True):
+            coin_ids = list(set(c["coin_id"] for c in st.session_state.my_crypto if c.get("coin_id")))
+            with st.spinner("正在從 CoinGecko 獲取最新幣價…"):
+                price_data = fetch_crypto_prices(coin_ids)
+            if price_data:
+                for c in st.session_state.my_crypto:
+                    cid = c.get("coin_id","")
+                    if cid in price_data:
+                        c["現價_USD"] = float(price_data[cid].get("usd", 0))
+                        c["現價_HKD"] = float(price_data[cid].get("hkd", 0))
+                        c["24h變動%"] = float(price_data[cid].get("usd_24h_change", 0))
+                save_now()
+                st.success(f"✅ 已更新 {len(price_data)} 個幣種價格")
+                st.rerun()
             else:
-                st.warning("⚠️ 無法取得 CoinGecko 價格，請稍後再試（可能暫時被限流）")
+                st.warning("⚠️ 無法連接 CoinGecko，請稍後再試")
 
-    tab1, tab2 = st.tabs(["📊 持倉總覽", "📋 交易記錄"])
-
-    # ── Tab1 ──
-    with tab1:
-        holdings = st.session_state.my_crypto_holdings
-        if holdings:
-            def cmv(h): return float(h.get("市值") or 0)
-            def cpnl(h): return float(h.get("盈虧") or 0)
-            def ccv(h): return float(h.get("數量") or 0) * float(h.get("平均成本") or 0)
-
-            total_mv = sum(cmv(h) for h in holdings)
-            total_cost = sum(ccv(h) for h in holdings)
-            total_pnl = sum(cpnl(h) for h in holdings)
-            pnl_pct = (total_pnl / total_cost * 100) if total_cost > 0 else 0.0
-            realized_map = get_crypto_realized_pnl_map(st.session_state.my_crypto_trades)
-            total_realized = sum(realized_map.values())
-
-            t1, t2, t3, t4, t5 = st.columns(5)
-            t1.metric("💼 持倉市值 (USD)", f"${total_mv:,.2f}")
-            t2.metric("📊 持倉成本 (USD)", f"${total_cost:,.2f}")
-            t3.metric("💰 未實現盈虧", f"${total_pnl:,.2f}",
-                      delta=f"{'+' if total_pnl>=0 else ''}{pnl_pct:.2f}%", delta_color="normal")
-            t4.metric("✅ 已實現盈虧", f"${total_realized:,.2f}", delta_color="normal")
-            t5.metric("📌 幣種數目", f"{len(holdings)} 種")
-            st.caption(f"折合 HKD：HK${total_mv*_fx:,.2f}（匯率 USD/HKD {_fx:.3f}，{_fx_data.get('src_date','—')}）")
-
-            pie_df = pd.DataFrame([{"幣種": h["幣種"], "市值": cmv(h)} for h in holdings if cmv(h) > 0])
-            if not pie_df.empty:
-                fig_c = px.pie(pie_df, values="市值", names="幣種", hole=0.45,
-                               color_discrete_sequence=px.colors.sequential.Tealgrn,
-                               title="💎 加密資產佔比 (USD)")
-                fig_c.update_layout(template="plotly_dark", margin=dict(l=5, r=5, t=40, b=5))
-                fig_c.update_traces(textposition="inside", textinfo="percent+label")
-                st.plotly_chart(fig_c, use_container_width=True)
-
-            st.markdown("---")
-            hh1, hh2, hh3, hh4, hh5, hh6 = st.columns([2, 1.2, 1.2, 1.2, 1.5, 1.2])
-            hh1.markdown("**幣種**"); hh2.markdown("**數量**"); hh3.markdown("**現價(USD)**")
-            hh4.markdown("**均成本(USD)**"); hh5.markdown("**未實現盈虧**"); hh6.markdown("**已實現盈虧**")
-            st.markdown("---")
-            for h in holdings:
-                c1, c2, c3, c4, c5, c6 = st.columns([2, 1.2, 1.2, 1.2, 1.5, 1.2])
-                pnl_h = cpnl(h)
-                qty = float(h.get("數量") or 0)
-                h_cost = float(h.get("平均成本") or 0)
-                h_price = float(h.get("現價") or 0)
-                pnl_p = (pnl_h / (qty*h_cost) * 100) if (qty*h_cost) > 0 else 0.0
-                clr = "#1D9E75" if pnl_h >= 0 else "#E24B4A"
-                sgn = "+" if pnl_h >= 0 else ""
-                real_pnl = float(realized_map.get(h.get("coingecko_id", ""), 0.0))
-                real_clr = "#1D9E75" if real_pnl >= 0 else "#E24B4A"
-                real_sgn = "+" if real_pnl >= 0 else ""
-                c1.write(h.get("幣種", ""))
-                c2.write(f"{qty:,.6g}")
-                c3.write(f"${h_price:,.4f}" if h_price > 0 else "—")
-                c4.write(f"${h_cost:,.4f}")
-                c5.markdown(f'<span style="color:{clr};font-weight:600">{sgn}${pnl_h:,.2f}{"<br><small>"+sgn+str(round(pnl_p,1))+"%</small>" if h_price>0 else ""}</span>', unsafe_allow_html=True)
-                c6.markdown(f'<span style="color:{real_clr};font-weight:600">{real_sgn}${real_pnl:,.2f}</span>', unsafe_allow_html=True)
-                st.divider()
-        else:
-            st.info("💡 尚無加密資產持倉，請到「📋 交易記錄」tab 新增買入交易。")
-        st.caption("💡 持倉由交易記錄自動計算（FIFO），現價更新後登入仍可保留。")
-
-    # ── Tab2 ──
-    with tab2:
-        st.write("#### 📝 新增加密貨幣交易")
-        with st.form("add_crypto_trade_form", clear_on_submit=True):
-            cr1, cr2, cr3, cr4 = st.columns([1.6, 1, 1, 1.2])
-            with cr1:
-                coin_choice = st.selectbox("幣種", list(CRYPTO_COIN_MAP.keys()) + ["✏️ 自訂（輸入 CoinGecko ID）"])
-            with cr2:
-                cr_type = st.selectbox("交易類型", ["📈 買入", "📉 賣出"])
-            with cr3:
-                cr_date = st.date_input("交易日期", datetime.now())
-            with cr4:
-                custom_id = st.text_input("自訂 CoinGecko ID", placeholder="例如：pepe",
-                                           disabled=(coin_choice != "✏️ 自訂（輸入 CoinGecko ID）"))
-            cr5, cr6, cr7 = st.columns(3)
-            with cr5: cr_qty = st.number_input("數量", min_value=0.0, step=0.0001, format="%.6f")
-            with cr6: cr_price = st.number_input("成交價 (USD)", min_value=0.0, step=0.01)
-            with cr7: cr_fee = st.number_input("手續費 (USD)", min_value=0.0, step=0.01)
-            is_buy = "買" in cr_type
-            if cr_qty > 0 and cr_price > 0:
-                net_amt = cr_qty*cr_price + cr_fee if is_buy else cr_qty*cr_price - cr_fee
-                st.caption(f"💡 成交金額：${cr_qty*cr_price:,.2f}　淨額：${net_amt:,.2f}")
-            if st.form_submit_button("✅ 確認記錄", use_container_width=True):
-                if coin_choice == "✏️ 自訂（輸入 CoinGecko ID）":
-                    coin_id = custom_id.strip().lower()
-                    symbol = coin_id.upper()
-                else:
-                    coin_id = CRYPTO_COIN_MAP[coin_choice]
-                    symbol = coin_choice.split(" ")[0]
-                if coin_id and cr_qty > 0 and cr_price > 0:
-                    net = cr_qty*cr_price + cr_fee if is_buy else cr_qty*cr_price - cr_fee
-                    st.session_state.my_crypto_trades.append({
-                        "日期": cr_date.strftime("%Y/%m/%d"), "幣種": symbol, "coingecko_id": coin_id,
-                        "類型": "買入" if is_buy else "賣出",
-                        "數量": cr_qty, "成交價": cr_price, "手續費": cr_fee,
-                        "成交金額": round(net, 6),
-                    })
-                    save_now(); refresh_crypto_holdings()
-                    st.success(f"✅ {'買入' if is_buy else '賣出'} {symbol} × {cr_qty:g} @ ${cr_price}")
-                    st.rerun()
-                else:
-                    st.warning("請選擇幣種（或輸入自訂 CoinGecko ID）並填寫數量及成交價")
-
+        total_crypto_usd = 0.0
+        total_crypto_cost = 0.0
+        st.markdown("#### 📊 加密資產總覽")
+        hdr = st.columns([2, 1.2, 1.2, 1.2, 1.5, 1.2, 0.6])
+        for h, t in zip(hdr, ["**幣種**","**數量**","**現價(USD)**","**均成本(USD)**","**未實現盈虧**","**24h變動**","🗑️"]):
+            h.markdown(t)
         st.markdown("---")
-        if st.session_state.my_crypto_trades:
-            ctrades_df = pd.DataFrame(st.session_state.my_crypto_trades)
-            f1, f2 = st.columns(2)
-            with f1: cf_name = st.text_input("🔍 搜尋幣種", key="crypto_search")
-            with f2: cf_type = st.selectbox("交易類型", ["全部", "買入", "賣出"], key="crypto_filter_type")
-            cfiltered = ctrades_df.copy()
-            if cf_name: cfiltered = cfiltered[cfiltered["幣種"].str.contains(cf_name, case=False, na=False)]
-            if cf_type != "全部": cfiltered = cfiltered[cfiltered["類型"] == cf_type]
-            cfiltered = cfiltered.sort_values("日期", ascending=False).reset_index(drop=True)
 
-            cbuy = cfiltered[cfiltered["類型"] == "買入"]
-            csell = cfiltered[cfiltered["類型"] == "賣出"]
-            ctotal_buy = float(cbuy["成交金額"].sum()) if not cbuy.empty else 0.0
-            ctotal_sell = float(csell["成交金額"].sum()) if not csell.empty else 0.0
+        for idx, c in enumerate(st.session_state.my_crypto):
+            qty = float(c.get("數量", 0))
+            cost = float(c.get("平均成本_USD", 0))
+            price = float(c.get("現價_USD", 0))
+            chg24 = float(c.get("24h變動%", 0))
+            mv_usd = qty * price
+            pnl_usd = qty * (price - cost)
+            pnl_pct = (pnl_usd / (qty * cost) * 100) if qty * cost > 0 else 0
+            total_crypto_usd += mv_usd
+            total_crypto_cost += qty * cost
+            pnl_clr = "#1D9E75" if pnl_usd >= 0 else "#E24B4A"
+            chg_clr = "#1D9E75" if chg24 >= 0 else "#E24B4A"
+            sgn = "+" if pnl_usd >= 0 else ""
+            chg_sgn = "+" if chg24 >= 0 else ""
 
-            cs1, cs2, cs3 = st.columns(3)
-            cs1.metric("📈 買入總額 (USD)", f"${ctotal_buy:,.2f}")
-            cs2.metric("📉 賣出總額 (USD)", f"${ctotal_sell:,.2f}")
-            cs3.metric("📋 交易筆數", f"{len(cfiltered)} 筆")
+            col1, col2, col3, col4, col5, col6, col7 = st.columns([2, 1.2, 1.2, 1.2, 1.5, 1.2, 0.6])
+            col1.write(f"**{c.get('名稱','')}**")
+            col2.write(f"{qty:,.6g}")
+            col3.write(f"${price:,.4f}" if price > 0 else "—")
+            col4.write(f"${cost:,.4f}")
+            col5.markdown(f'<span style="color:{pnl_clr};font-weight:600">{sgn}${pnl_usd:,.2f} ({sgn}{pnl_pct:.1f}%)</span>', unsafe_allow_html=True)
+            col6.markdown(f'<span style="color:{chg_clr}">{chg_sgn}{chg24:.2f}%</span>' if price > 0 else "—", unsafe_allow_html=True)
+            if col7.button("🗑️", key=f"del_crypto_{idx}"):
+                st.session_state.my_crypto.pop(idx)
+                save_now(); st.rerun()
+            st.divider()
 
-            ch1, ch2, ch3, ch4, ch5, ch6, ch7 = st.columns([1.2, 1.2, 0.8, 1, 1, 1, 0.5])
-            ch1.markdown("**日期**"); ch2.markdown("**幣種**"); ch3.markdown("**類型**")
-            ch4.markdown("**數量**"); ch5.markdown("**成交價**"); ch6.markdown("**淨額**"); ch7.markdown("🗑️")
-            st.markdown("---")
-            for idx, row in cfiltered.iterrows():
-                c1, c2, c3, c4, c5, c6, c7 = st.columns([1.2, 1.2, 0.8, 1, 1, 1, 0.5])
-                clr = "#1D9E75" if row["類型"] == "買入" else "#E24B4A"
-                c1.write(row["日期"]); c2.write(row["幣種"])
-                c3.markdown(f'<span style="color:{clr};font-weight:600">{row["類型"]}</span>', unsafe_allow_html=True)
-                c4.write(f'{float(row["數量"]):,.6g}')
-                c5.write(f'{float(row["成交價"]):,.4f}')
-                c6.write(f'{float(row["成交金額"]):,.4f}')
-                match_idx = next((j for j, t in enumerate(st.session_state.my_crypto_trades)
-                    if t["日期"] == row["日期"] and t["coingecko_id"] == row["coingecko_id"]
-                    and abs(float(t["成交價"])-float(row["成交價"])) < 1e-9
-                    and abs(float(t["數量"])-float(row["數量"])) < 1e-9), -1)
-                if c7.button("🗑️", key=f"del_crypto_trade_{idx}"):
-                    if match_idx >= 0:
-                        st.session_state.my_crypto_trades.pop(match_idx)
-                        save_now(); refresh_crypto_holdings(); st.rerun()
-                st.divider()
-        else:
-            st.info("💡 尚無交易記錄，填寫上方表單加入。")
-
-# ══════════════════════════════════════════════════════
-# 頁面 4.2: 📊 收支預測（未來3個月，基於過去平均）
-# ══════════════════════════════════════════════════════
-elif page_choice == "📊 收支預測 (未來3月)":
-    st.subheader("📊 未來3個月收支預測")
-    st.caption("根據過去歷史記帳數據的月平均收支，預測未來3個月的收入、支出與儲蓄走勢")
-
-    lookback = st.slider("採用過去幾個月的平均值作為預測基礎", min_value=1, max_value=12, value=6, key="forecast_lookback")
-    avg_income, avg_expense, avg_by_cat, months_used = compute_monthly_averages(df_current_logs, lookback)
-
-    if months_used == 0:
-        st.info("💡 記帳數據不足，無法產生預測。請先到「💸 每日單筆記帳」累積數據。")
+        total_pnl_usd = total_crypto_usd - total_crypto_cost
+        pnl_pct_total = (total_pnl_usd / total_crypto_cost * 100) if total_crypto_cost > 0 else 0
+        m1, m2, m3 = st.columns(3)
+        m1.metric("💼 加密持倉市值", f"${total_crypto_usd:,.2f} USD")
+        m2.metric("📊 加密持倉成本", f"${total_crypto_cost:,.2f} USD")
+        m3.metric("💰 未實現盈虧", f"${total_pnl_usd:,.2f}",
+                  delta=f"{'+'if total_pnl_usd>=0 else ''}{pnl_pct_total:.2f}%",
+                  delta_color="normal")
     else:
-        st.caption(f"📌 統計樣本：過去 {lookback} 個月內，共有 {months_used} 個月有記帳數據")
-        avg_savings = avg_income - avg_expense
-        f1, f2, f3 = st.columns(3)
-        f1.metric("📥 平均月收入", f"${avg_income:,.0f}")
-        f2.metric("📤 平均月支出", f"${avg_expense:,.0f}")
-        f3.metric("💰 預估月儲蓄", f"${avg_savings:,.0f}",
-                  delta=f"儲蓄率 {avg_savings/avg_income*100:.1f}%" if avg_income > 0 else None)
+        st.info("💡 尚未新增加密貨幣持倉，使用上方表單新增。")
 
-        st.markdown("---")
-        st.markdown("#### 📅 歷史收支 vs 未來3月預測")
+# ══════════════════════════════════════════════════════
+# 頁面 6: 智能提醒中心
+# ══════════════════════════════════════════════════════
+elif page_choice == "🔔 智能提醒中心":
+    st.subheader("🔔 智能提醒中心")
+    st.caption("預算超支警報 · 儲蓄目標追蹤 · 財務健康提示")
 
-        now_dt = datetime.now()
-        df_hist = df_current_logs.copy()
-        df_hist["日期_dt"] = pd.to_datetime(df_hist["日期"], errors="coerce")
-        df_hist = df_hist.dropna(subset=["日期_dt"])
-        is_inc_h = (df_hist["類型"] == "收入 📥") | (df_hist["分類"] == "收入")
-        df_hist["年月"] = df_hist["日期_dt"].dt.to_period("M")
+    # ─── 儲蓄目標設定 ───
+    st.markdown("### 🎯 儲蓄目標設定")
+    sg_col1, sg_col2, sg_col3 = st.columns([2,2,1])
+    with sg_col1:
+        new_goal_name = st.text_input("目標名稱", value=st.session_state.my_savings_goal_name, key="goal_name_input")
+    with sg_col2:
+        new_goal_amt = st.number_input("目標金額 (HK$)", value=float(st.session_state.my_savings_goal),
+                                        min_value=0.0, step=1000.0, key="goal_amt_input")
+    with sg_col3:
+        st.markdown("<br>", unsafe_allow_html=True)
+        if st.button("💾 儲存目標", use_container_width=True):
+            st.session_state.my_savings_goal = new_goal_amt
+            st.session_state.my_savings_goal_name = new_goal_name.strip() or "儲蓄目標"
+            save_now()
+            st.success("✅ 目標已儲存！")
+            st.rerun()
 
-        chart_rows = []
-        for i in range(lookback - 1, -1, -1):
-            m = now_dt - pd.DateOffset(months=i)
-            period = pd.Period(m, freq="M")
-            inc = float(df_hist[(df_hist["年月"] == period) & is_inc_h]["金額"].sum())
-            exp = float(df_hist[(df_hist["年月"] == period) & ~is_inc_h]["金額"].sum())
-            chart_rows.append({"月份": period.strftime("%Y/%m"), "收入": inc, "支出": exp, "類別": "歷史"})
+    goal = float(st.session_state.my_savings_goal)
+    if goal > 0:
+        progress_pct = min(expected_savings / goal * 100, 100) if goal > 0 else 0
+        prog_clr = "#1D9E75" if progress_pct >= 80 else "#EF9F27" if progress_pct >= 40 else "#E24B4A"
+        st.markdown(f"""
+        <div style="margin:12px 0">
+        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+          <span style="font-weight:600">{st.session_state.my_savings_goal_name}</span>
+          <span style="color:{prog_clr};font-weight:700">{progress_pct:.1f}%</span>
+        </div>
+        <div style="background:#1a2a3a;border-radius:8px;height:14px;overflow:hidden">
+          <div style="width:{progress_pct}%;background:{prog_clr};height:100%;border-radius:8px;transition:width 0.5s"></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;font-size:12px;color:#718096;margin-top:4px">
+          <span>已存 HK${expected_savings:,.0f}</span>
+          <span>目標 HK${goal:,.0f}</span>
+        </div>
+        </div>
+        """, unsafe_allow_html=True)
 
-        for i in range(1, 4):
-            future = now_dt + pd.DateOffset(months=i)
-            period = pd.Period(future, freq="M")
-            chart_rows.append({"月份": period.strftime("%Y/%m"), "收入": avg_income, "支出": avg_expense, "類別": "預測"})
+    st.markdown("---")
 
-        chart_df = pd.DataFrame(chart_rows)
-        hist_df_c = chart_df[chart_df["類別"] == "歷史"]
-        fc_df_c = chart_df[chart_df["類別"] == "預測"]
+    # ─── 預算超支警報 ───
+    st.markdown("### 🚨 預算超支警報")
+    alerts = []
+    warnings_list = []
+    ok_list = []
+    for cat, budget_val in st.session_state.my_budget.items():
+        actual = actual_spent_map.get(cat, 0.0)
+        if budget_val <= 0 and actual <= 0:
+            continue
+        if budget_val > 0:
+            rate = actual / budget_val * 100
+            if rate >= 100:
+                alerts.append((cat, actual, budget_val, rate))
+            elif rate >= 80:
+                warnings_list.append((cat, actual, budget_val, rate))
+            else:
+                ok_list.append((cat, actual, budget_val, rate))
+        else:
+            alerts.append((cat, actual, 0, 100))
 
-        fig_fc = go.Figure()
-        fig_fc.add_trace(go.Bar(name="收入(歷史)", x=hist_df_c["月份"], y=hist_df_c["收入"], marker_color="#1D9E75"))
-        fig_fc.add_trace(go.Bar(name="支出(歷史)", x=hist_df_c["月份"], y=hist_df_c["支出"], marker_color="#E24B4A"))
-        fig_fc.add_trace(go.Bar(name="收入(預測)", x=fc_df_c["月份"], y=fc_df_c["收入"], marker_color="#1D9E75", opacity=0.4))
-        fig_fc.add_trace(go.Bar(name="支出(預測)", x=fc_df_c["月份"], y=fc_df_c["支出"], marker_color="#E24B4A", opacity=0.4))
-        fig_fc.update_layout(template="plotly_dark", barmode="group",
-                              margin=dict(l=10, r=10, t=10, b=10),
-                              legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-        st.plotly_chart(fig_fc, use_container_width=True)
-        st.caption("💡 較淡色的長條為未來3個月的預測值（等於過去平均）")
+    if alerts:
+        st.error(f"🔴 發現 **{len(alerts)}** 個預算超支項目！")
+        for cat, actual, bgt, rate in alerts:
+            over = actual - bgt
+            st.markdown(f"""
+            <div style="background:rgba(226,75,74,0.1);border:1px solid rgba(226,75,74,0.4);border-radius:10px;padding:12px 16px;margin-bottom:8px">
+            <div style="display:flex;justify-content:space-between;align-items:center">
+              <span style="font-weight:600;color:#E24B4A">🔴 {cat}</span>
+              <span style="color:#E24B4A;font-weight:700">超出 ${over:,.0f}（{rate:.0f}%）</span>
+            </div>
+            <div style="font-size:12px;color:#a0aec0;margin-top:4px">實際支出 ${actual:,.0f} / 預算 ${bgt:,.0f}</div>
+            </div>
+            """, unsafe_allow_html=True)
+    else:
+        st.success("✅ 目前沒有超支項目")
 
-        st.markdown("---")
-        st.markdown("#### 📋 未來3個月預測明細")
-        future_table = []
-        cum_savings = 0.0
-        cum_net_worth = net_worth
-        for i in range(1, 4):
-            future = now_dt + pd.DateOffset(months=i)
-            cum_savings += avg_savings
-            cum_net_worth += avg_savings
-            future_table.append({
-                "月份": pd.Period(future, freq="M").strftime("%Y年%m月"),
-                "預估收入": f"${avg_income:,.0f}",
-                "預估支出": f"${avg_expense:,.0f}",
-                "預估儲蓄": f"${avg_savings:,.0f}",
-                "累計儲蓄": f"${cum_savings:,.0f}",
-                "預估淨身家(HKD)": f"HK${cum_net_worth:,.0f}",
-            })
-        st.dataframe(pd.DataFrame(future_table), use_container_width=True, hide_index=True)
+    if warnings_list:
+        st.warning(f"🟡 **{len(warnings_list)}** 個項目即將達到預算上限")
+        for cat, actual, bgt, rate in warnings_list:
+            remain = bgt - actual
+            st.markdown(f"""
+            <div style="background:rgba(239,159,39,0.1);border:1px solid rgba(239,159,39,0.4);border-radius:10px;padding:10px 16px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-weight:600;color:#EF9F27">🟡 {cat}</span>
+              <span style="color:#EF9F27">剩餘 ${remain:,.0f}（已用 {rate:.0f}%）</span>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
 
-        st.markdown("---")
-        st.markdown("#### 📊 各分類平均月支出（預測基礎）")
-        if avg_by_cat:
-            cat_df = pd.DataFrame(list(avg_by_cat.items()), columns=["分類", "平均月支出"])
-            cat_df = cat_df[cat_df["平均月支出"] > 0].sort_values("平均月支出", ascending=False)
-            if not cat_df.empty:
-                fig_cat = px.bar(cat_df, x="分類", y="平均月支出", color="平均月支出",
-                                 color_continuous_scale="RdYlGn_r")
-                fig_cat.update_layout(template="plotly_dark", showlegend=False, margin=dict(l=10, r=10, t=10, b=10))
+    st.markdown("---")
+
+    # ─── 財務健康提示 ───
+    st.markdown("### 💡 財務健康提示")
+    tips = []
+    if savings_rate < 10 and total_actual_income > 0:
+        tips.append(("🔴 儲蓄率偏低", f"本月儲蓄率僅 {savings_rate:.1f}%，建議目標 20% 以上。請檢視可削減的非必要支出。"))
+    elif savings_rate < 20 and total_actual_income > 0:
+        tips.append(("🟡 儲蓄率待改善", f"本月儲蓄率 {savings_rate:.1f}%，距離理想的 20% 仍有空間。"))
+    else:
+        tips.append(("🟢 儲蓄率良好", f"本月儲蓄率 {savings_rate:.1f}%，表現優秀！請繼續保持。"))
+
+    if total_assets > 0 and (total_liabilities / total_assets) > 0.5:
+        tips.append(("🔴 負債比率偏高", f"負債佔資產 {total_liabilities/total_assets*100:.1f}%，建議優先清償高息負債。"))
+
+    if holdings_total_value > 0 and (holdings_total_value / net_worth) > 0.7 if net_worth > 0 else False:
+        tips.append(("🟡 投資集中度偏高", f"持倉市值佔淨資產逾 70%，建議適當分散資產。"))
+
+    if total_actual_income == 0:
+        tips.append(("ℹ️ 尚無收入記錄", "本月尚未記錄收入，請前往「每日單筆記帳」新增收入記錄。"))
+
+    for title, desc in tips:
+        st.markdown(f"""
+        <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:10px;padding:12px 16px;margin-bottom:8px">
+        <div style="font-weight:600;margin-bottom:4px">{title}</div>
+        <div style="color:#a0aec0;font-size:13px">{desc}</div>
+        </div>
+        """, unsafe_allow_html=True)
+
+# ══════════════════════════════════════════════════════
+# 頁面 7: 未來3月收支預測
+# ══════════════════════════════════════════════════════
+elif page_choice == "📉 未來3月收支預測":
+    st.subheader("📉 未來3月收支預測")
+    st.caption("基於過去數據自動計算月均收支，預測未來3個月財務走勢")
+
+    if df_current_logs.empty:
+        st.info("💡 尚無記帳數據，記帳後自動生成預測。")
+    else:
+        df_pred = df_current_logs.copy()
+        df_pred["日期_dt"] = pd.to_datetime(df_pred["日期"], errors="coerce")
+        df_pred = df_pred.dropna(subset=["日期_dt"])
+        df_pred["年月"] = df_pred["日期_dt"].dt.to_period("M")
+
+        is_inc_p = (df_pred["類型"] == "收入 📥") | (df_pred["分類"] == "收入")
+        monthly_inc = df_pred[is_inc_p].groupby("年月")["金額"].sum()
+        monthly_exp = df_pred[~is_inc_p].groupby("年月")["金額"].sum()
+        monthly_sav = monthly_inc.subtract(monthly_exp, fill_value=0)
+
+        if len(monthly_inc) == 0:
+            st.info("💡 暫無足夠數據進行預測（需至少1個月記錄）。")
+        else:
+            avg_inc = float(monthly_inc.mean())
+            avg_exp = float(monthly_exp.mean()) if len(monthly_exp) > 0 else 0.0
+            avg_sav = avg_inc - avg_exp
+
+            now_p = pd.Period(datetime.now(), freq="M")
+            future_months = [now_p + i for i in range(1, 4)]
+            future_labels = [str(m) for m in future_months]
+
+            inc_pred = [avg_inc] * 3
+            exp_pred = [avg_exp] * 3
+            sav_pred = [avg_sav] * 3
+
+            p1, p2, p3 = st.columns(3)
+            p1.metric("📈 預測月均收入", f"${avg_inc:,.0f}", help="基於所有月份平均")
+            p2.metric("📉 預測月均支出", f"${avg_exp:,.0f}", help="基於所有月份平均")
+            p3.metric("💰 預測月均儲蓄", f"${avg_sav:,.0f}",
+                      delta=f"{'+'if avg_sav>=0 else ''}{(avg_sav/avg_inc*100) if avg_inc>0 else 0:.1f}%",
+                      delta_color="normal")
+            st.markdown("---")
+
+            # 歷史 + 預測圖
+            hist_labels = [str(p) for p in monthly_inc.index.union(monthly_exp.index)]
+            hist_inc = [float(monthly_inc.get(p, 0)) for p in monthly_inc.index.union(monthly_exp.index)]
+            hist_exp = [float(monthly_exp.get(p, 0)) for p in monthly_inc.index.union(monthly_exp.index)]
+            hist_sav = [i - e for i, e in zip(hist_inc, hist_exp)]
+
+            fig_pred = go.Figure()
+            fig_pred.add_trace(go.Bar(name="歷史收入", x=hist_labels, y=hist_inc, marker_color="#1D9E75", opacity=0.7))
+            fig_pred.add_trace(go.Bar(name="歷史支出", x=hist_labels, y=hist_exp, marker_color="#E24B4A", opacity=0.7))
+            fig_pred.add_trace(go.Bar(name="預測收入", x=future_labels, y=inc_pred,
+                                       marker_color="#1D9E75", marker_pattern_shape="/", opacity=0.9))
+            fig_pred.add_trace(go.Bar(name="預測支出", x=future_labels, y=exp_pred,
+                                       marker_color="#E24B4A", marker_pattern_shape="/", opacity=0.9))
+            fig_pred.add_trace(go.Scatter(name="歷史儲蓄", x=hist_labels, y=hist_sav,
+                                           mode="lines+markers", line=dict(color="#3b82f6", width=2)))
+            fig_pred.add_trace(go.Scatter(name="預測儲蓄", x=future_labels, y=sav_pred,
+                                           mode="lines+markers", line=dict(color="#3b82f6", width=2, dash="dot"),
+                                           marker=dict(symbol="diamond", size=10)))
+            fig_pred.update_layout(template="plotly_dark", barmode="group",
+                                    margin=dict(l=10, r=10, t=10, b=10),
+                                    legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
+            st.plotly_chart(fig_pred, use_container_width=True)
+
+            # 預測明細表
+            st.markdown("#### 📋 未來3個月預測明細")
+            st.dataframe(pd.DataFrame({
+                "月份": future_labels,
+                "預測收入": [f"${v:,.0f}" for v in inc_pred],
+                "預測支出": [f"${v:,.0f}" for v in exp_pred],
+                "預測儲蓄": [f"${v:,.0f}" for v in sav_pred],
+                "儲蓄率": [f"{(v/i*100) if i>0 else 0:.1f}%" for v, i in zip(sav_pred, inc_pred)],
+                "累計儲蓄": [f"${sum(sav_pred[:i+1]):,.0f}" for i in range(3)],
+            }), use_container_width=True, hide_index=True)
+
+            st.caption(f"💡 預測基於過去 {len(monthly_inc)} 個月平均數據，實線為歷史，虛線為預測。")
+
+            # 支出分類預測
+            st.markdown("---")
+            st.markdown("#### 📊 預測支出分類")
+            exp_by_cat = df_pred[~is_inc_p].groupby(["年月", "分類"])["金額"].sum().unstack(fill_value=0)
+            avg_by_cat = exp_by_cat.mean().sort_values(ascending=False)
+            if not avg_by_cat.empty:
+                top_cats = avg_by_cat[avg_by_cat > 0]
+                fig_cat = px.bar(x=top_cats.values, y=top_cats.index, orientation="h",
+                                 title="月均支出分類（預測基準）",
+                                 color=top_cats.values, color_continuous_scale="RdYlGn_r")
+                fig_cat.update_layout(template="plotly_dark", showlegend=False,
+                                       margin=dict(l=10, r=10, t=40, b=10))
                 st.plotly_chart(fig_cat, use_container_width=True)
 
-                st.markdown("#### 🎯 預測月均支出 vs 預算上限")
-                budget_cmp = []
-                for cat, avg_v in avg_by_cat.items():
-                    b_val = float(st.session_state.my_budget.get(cat, 0) or 0)
-                    if avg_v > 0 or b_val > 0:
-                        budget_cmp.append({"分類": cat, "預測月均支出": avg_v, "預算上限": b_val})
-                if budget_cmp:
-                    bc_df = pd.DataFrame(budget_cmp)
-                    bc_melt = bc_df.melt(id_vars="分類", var_name="項目", value_name="金額")
-                    fig_bc = px.bar(bc_melt, x="分類", y="金額", color="項目", barmode="group",
-                                    color_discrete_map={"預測月均支出": "#3b82f6", "預算上限": "#888780"})
-                    fig_bc.update_layout(template="plotly_dark", margin=dict(l=10, r=10, t=10, b=10),
-                                          legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="right", x=1))
-                    st.plotly_chart(fig_bc, use_container_width=True)
+# ══════════════════════════════════════════════════════
+# 頁面 8: 多幣別匯率
+# ══════════════════════════════════════════════════════
+elif page_choice == "💱 多幣別匯率":
+    st.subheader("💱 多幣別即時匯率")
+    st.caption("由 exchangerate-api 提供免費匯率數據 · 支援 HKD 基礎換算")
 
-                    over_cats = [r["分類"] for r in budget_cmp if r["預算上限"] > 0 and r["預測月均支出"] > r["預算上限"]]
-                    if over_cats:
-                        st.warning(f"⚠️ 根據過去平均，以下分類預測支出可能持續超出預算：{', '.join(over_cats)}")
-        else:
-            st.info("💡 過去期間尚無支出分類數據。")
+    CURRENCIES = {
+        "美元 USD 🇺🇸": "USD", "港元 HKD 🇭🇰": "HKD", "人民幣 CNY 🇨🇳": "CNY",
+        "英鎊 GBP 🇬🇧": "GBP", "歐元 EUR 🇪🇺": "EUR", "日圓 JPY 🇯🇵": "JPY",
+        "韓圜 KRW 🇰🇷": "KRW", "澳元 AUD 🇦🇺": "AUD", "加元 CAD 🇨🇦": "CAD",
+        "新加坡元 SGD 🇸🇬": "SGD", "新台幣 TWD 🇹🇼": "TWD", "瑞士法郎 CHF 🇨🇭": "CHF",
+    }
 
-        st.caption("⚠️ 此預測純粹基於過去平均值的簡單估算，未考慮季節性或突發性支出變化，僅供參考。")
+    @st.cache_data(ttl=300)  # 快取5分鐘
+    def fetch_fx_rates(base: str = "HKD") -> dict:
+        try:
+            url = f"https://open.er-api.com/v6/latest/{base}"
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("result") == "success":
+                    return data.get("rates", {})
+        except Exception:
+            pass
+        # 後備靜態匯率（HKD基準）
+        return {
+            "USD": 0.1282, "CNY": 0.9285, "GBP": 0.1009, "EUR": 0.1176,
+            "JPY": 19.08, "KRW": 175.2, "AUD": 0.1985, "CAD": 0.1773,
+            "SGD": 0.1725, "TWD": 4.185, "CHF": 0.1149, "HKD": 1.0
+        }
+
+    base_label = st.selectbox("基準幣別", list(CURRENCIES.keys()), index=0)
+    base_ccy = CURRENCIES[base_label]
+
+    col_refresh, col_amount = st.columns([1, 2])
+    with col_refresh:
+        refresh_fx = st.button("🔄 更新匯率", use_container_width=True)
+    with col_amount:
+        input_amount = st.number_input("換算金額", value=100.0, min_value=0.01, step=10.0)
+
+    if refresh_fx:
+        st.cache_data.clear()
+
+    rates = fetch_fx_rates(base_ccy)
+
+    if rates:
+        st.markdown(f"#### 📊 以 **{base_label}** 為基準")
+        st.caption(f"💡 匯率每5分鐘自動緩存，點擊「更新匯率」強制刷新")
+
+        display_ccys = [c for c in CURRENCIES.values() if c != base_ccy]
+        cols_per_row = 4
+        rows = [display_ccys[i:i+cols_per_row] for i in range(0, len(display_ccys), cols_per_row)]
+
+        for row in rows:
+            cols = st.columns(len(row))
+            for col, ccy in zip(cols, row):
+                rate = rates.get(ccy, 0)
+                converted = input_amount * rate if rate > 0 else 0
+                label = next(k for k, v in CURRENCIES.items() if v == ccy)
+                col.metric(
+                    label=label,
+                    value=f"{converted:,.2f}",
+                    delta=f"1 {base_ccy} = {rate:.4f} {ccy}" if rate > 0 else "N/A"
+                )
+
+        # 常用換算表
+        st.markdown("---")
+        st.markdown("#### 🔄 常用金額快速換算")
+        common_amounts = [100, 500, 1000, 5000, 10000, 50000]
+        top_ccys = ["USD", "HKD", "CNY", "JPY", "EUR", "GBP"]
+        top_ccys_filtered = [c for c in top_ccys if c != base_ccy][:5]
+
+        table_data = {"金額": [f"{a:,}" for a in common_amounts]}
+        for ccy in top_ccys_filtered:
+            rate = rates.get(ccy, 0)
+            table_data[ccy] = [f"{a*rate:,.2f}" if rate > 0 else "—" for a in common_amounts]
+        st.dataframe(pd.DataFrame(table_data), use_container_width=True, hide_index=True)
+    else:
+        st.error("❌ 無法獲取匯率數據，請檢查網路連接。")
+
+    # 側欄快速匯率顯示
+    st.sidebar.markdown("---")
+    sidebar_rates_data = fetch_fx_rates("HKD")
+    if sidebar_rates_data:
+        st.sidebar.markdown("**💱 即時匯率（HKD基準）**")
+        for ccy in ["USD", "CNY", "JPY", "EUR", "GBP"]:
+            r = sidebar_rates_data.get(ccy, 0)
+            if r > 0:
+                st.sidebar.caption(f"1 HKD = {r:.4f} {ccy}")
 
 # ══════════════════════════════════════════════════════
-# 頁面 5: AI 理財建議
+# 頁面 9: AI 理財建議
 # ══════════════════════════════════════════════════════
 elif page_choice == "🤖 AI 理財建議":
     st.subheader("🤖 AI 理財建議")
@@ -1680,31 +1579,14 @@ elif page_choice == "🤖 AI 理財建議":
         pnl_p = (pnl_h/(qty*hc)*100) if qty*hc>0 else 0
         holdings_text += f"- {h.get('名稱','')} ({h.get('幣別','USD')}): {qty:,.2f}股 均成本{hc:,.4f} 現價{float(h.get('現價',0)):,.2f} 未實現{'+'if pnl_h>=0 else ''}{pnl_h:,.2f} ({pnl_p:+.1f}%)\n"
 
-    crypto_text = ""
-    for h in st.session_state.get("my_crypto_holdings", []):
-        pnl_h = float(h.get("盈虧") or 0)
-        qty = float(h.get("數量",0)); hc = float(h.get("平均成本",1))
-        pnl_p = (pnl_h/(qty*hc)*100) if qty*hc>0 else 0
-        crypto_text += f"- {h.get('幣種','')}: {qty:,.6g}枚 均成本${hc:,.4f} 現價${float(h.get('現價',0)):,.4f} 未實現{'+'if pnl_h>=0 else ''}${pnl_h:,.2f} ({pnl_p:+.1f}%)\n"
-
-    _goal = st.session_state.get("my_savings_goal", {})
-    _avg_inc, _avg_exp, _avg_by_cat, _months_used = compute_monthly_averages(df_current_logs, 6)
-    _avg_sav = _avg_inc - _avg_exp
-
     fin_summary = f"""用戶財務狀況：
 - 總資產：HK${total_assets:,.2f} | 總負債：HK${total_liabilities:,.2f} | 淨資產：HK${net_worth:,.2f}
 - 本月收入：${total_actual_income:,.2f} | 本月支出：${total_actual_expense:,.2f} | 儲蓄率：{savings_rate:.1f}%
 - 持倉市值(USD)：${_holdings_usd_mv:,.2f} | 持倉市值(HKD)：HK${_holdings_hkd_mv:,.2f}
-- 加密資產市值(USD)：${_crypto_usd_mv:,.2f}（折合HK${crypto_total_value_hkd:,.2f}）
 - 已實現盈虧(USD)：${_total_realized_usd:,.2f} | 已實現盈虧(HKD)：HK${_total_realized_hkd:,.2f}
 - 負債比：{(total_liabilities/total_assets*100) if total_assets>0 else 0:.1f}%
-- 即時匯率：USD/HKD {_fx:.3f}
-- 儲蓄目標：目標儲蓄率 {_goal.get('目標儲蓄率',0):.1f}% / 目標月儲蓄額 ${_goal.get('目標月儲蓄額',0):,.0f}
-- 過去{_months_used}個月平均：月收入${_avg_inc:,.0f} / 月支出${_avg_exp:,.0f} / 月儲蓄${_avg_sav:,.0f}
-持倉明細（股票）：
-{holdings_text if holdings_text else "（尚無股票持倉）"}
-持倉明細（加密資產）：
-{crypto_text if crypto_text else "（尚無加密資產持倉）"}
+持倉明細：
+{holdings_text if holdings_text else "（尚無持倉）"}
 主要支出（本月）：
 """ + "\n".join([f"- {k}：${v:,.2f}" for k,v in actual_spent_map.items() if v > 0])
 
@@ -1727,23 +1609,54 @@ elif page_choice == "🤖 AI 理財建議":
 
         with st.spinner("🤖 AI 正在分析您的財務狀況…"):
             try:
+                # 獲取 API Key（先從 secrets，再讓用戶輸入）
+                try:
+                    anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
+                except Exception:
+                    anthropic_key = st.session_state.get("anthropic_api_key_input", "")
+
+                if not anthropic_key:
+                    st.warning("⚠️ 請先在下方輸入 Anthropic API Key，或在 Streamlit Secrets 中設定 `ANTHROPIC_API_KEY`。")
+                    st.stop()
+
                 response = requests.post(
                     "https://api.anthropic.com/v1/messages",
-                    headers={"Content-Type": "application/json"},
+                    headers={
+                        "Content-Type": "application/json",
+                        "x-api-key": anthropic_key,
+                        "anthropic-version": "2023-06-01",
+                    },
                     json={
                         "model": "claude-sonnet-4-6",
-                        "max_tokens": 1000,
+                        "max_tokens": 1200,
                         "system": "你是一位專業的香港個人理財顧問，擅長分析用戶財務數據並提供實用建議。回答要具體、有條理，使用繁體中文，適當使用emoji讓內容更易讀。",
                         "messages": [{"role": "user", "content": full_prompt}]
-                    }
+                    },
+                    timeout=30
                 )
                 data = response.json()
-                ai_text = data["content"][0]["text"]
-                st.markdown(f'<div class="ai-card">{ai_text.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+                if "error" in data:
+                    err_msg = data["error"].get("message", str(data["error"]))
+                    st.error(f"❌ API 錯誤：{err_msg}")
+                elif "content" in data and data["content"]:
+                    ai_text = data["content"][0].get("text", "（AI 未返回內容）")
+                    st.markdown(f'<div class="ai-card">{ai_text.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+                else:
+                    st.error(f"❌ 未預期的回應格式：{data}")
+            except requests.exceptions.Timeout:
+                st.error("❌ 請求超時，請稍後再試。")
             except Exception as e:
                 st.error(f"❌ AI 請求失敗：{e}")
 
     st.markdown("---")
+    with st.expander("🔑 API Key 設定（首次使用需填寫）", expanded=False):
+        st.caption("如 Streamlit Secrets 中已設定 `ANTHROPIC_API_KEY`，無需在此填寫。")
+        api_key_input = st.text_input("Anthropic API Key", type="password",
+                                       value=st.session_state.get("anthropic_api_key_input",""),
+                                       key="api_key_field", placeholder="sk-ant-...")
+        if st.button("💾 儲存 Key（僅本次會話）", use_container_width=True):
+            st.session_state["anthropic_api_key_input"] = api_key_input
+            st.success("✅ API Key 已儲存（不會上傳至雲端）")
     st.caption("⚠️ AI 建議僅供參考，不構成投資或財務建議。重大財務決定請諮詢專業顧問。")
 
 # ══════════════════════════════════════════════════════
@@ -1929,30 +1842,3 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         for cat, b_val in list(st.session_state.my_budget.items()):
             new_budget = st.number_input(f"【{cat}】", value=float(b_val), min_value=0.0, step=100.0, key=f"budget_input_{cat}")
             if new_budget != b_val: st.session_state.my_budget[cat] = new_budget; save_now()
-
-    st.markdown("---")
-    st.write("### 🔔 智能提醒：儲蓄目標設定")
-    st.caption("設定後，財務總覽頁面頂部會自動提示是否達標，並結合每月預算超支提醒。")
-    goal = st.session_state.get("my_savings_goal", {"目標儲蓄率": 20.0, "目標月儲蓄額": 0.0})
-    g_col1, g_col2 = st.columns(2)
-    with g_col1:
-        new_rate = st.number_input("🎯 目標儲蓄率 (%)", value=float(goal.get("目標儲蓄率", 20.0)),
-                                    min_value=0.0, max_value=100.0, step=1.0, key="goal_rate_input")
-    with g_col2:
-        new_amount = st.number_input("💰 目標每月儲蓄金額 ($)", value=float(goal.get("目標月儲蓄額", 0.0)),
-                                      min_value=0.0, step=500.0, key="goal_amount_input")
-    if st.button("💾 儲存儲蓄目標", use_container_width=True):
-        st.session_state.my_savings_goal = {"目標儲蓄率": new_rate, "目標月儲蓄額": new_amount}
-        save_now(); st.success("✅ 已儲存儲蓄目標！"); st.rerun()
-
-    st.markdown("---")
-    st.write("### 💱 多幣別匯率")
-    st.caption("匯率每日自動從 Frankfurter（歐洲央行）API 更新一次，亦可手動立即更新。")
-    _rates = _fx_data.get("rates", {})
-    fx_cols = st.columns(4)
-    for i, sym in enumerate(["HKD", "CNY", "EUR", "GBP", "JPY", "AUD", "CAD", "SGD"]):
-        with fx_cols[i % 4]:
-            st.metric(f"USD/{sym}", f"{_rates.get(sym, 0):,.4f}" if _rates.get(sym) else "—")
-    st.caption(f"資料日期：{_fx_data.get('src_date','—')}")
-    if st.button("🔄 立即更新匯率", use_container_width=True, key="fx_refresh_settings"):
-        get_fx_rates(force=True); st.rerun()
