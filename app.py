@@ -922,7 +922,7 @@ elif page_choice == "📈 投資持倉記錄":
             # ══ 同步資產帳戶 ══
             st.markdown("---")
             st.markdown("#### 🏦 同步入資產帳戶")
-            st.caption("將買入股本 / 賣出所得 / 持倉市值自動反映到資產帳戶，避免重複計算。")
+            st.caption("公式：帳戶新值 = 原有資本 + 賣出所得 − 買入成本 + 現持倉市值")
 
             # 計算各項數值（全部轉 HKD）
             all_trades = st.session_state.get("my_trades", [])
@@ -936,47 +936,66 @@ elif page_choice == "📈 投資持倉記錄":
                 float(t.get("成交金額",0)) * (sync_fx if t.get("幣別","USD") == "USD" else 1)
                 for t in all_trades if t.get("類型","") == "賣出"
             )
-            net_cash_from_trades = total_sell_hkd - total_buy_hkd  # 扣成本後淨現金流
+            # 淨現金流 = 賣出 - 買入（正數=賺錢取回現金，負數=仍有資金鎖在持倉）
+            net_cash_flow = total_sell_hkd - total_buy_hkd
             holdings_mv_hkd = (
                 sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="USD") * sync_fx
                 + sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="HKD")
             )
 
-            sa1, sa2, sa3 = st.columns(3)
-            sa1.metric("📥 賣出所得（累計 HKD）", f"HK${total_sell_hkd:,.2f}", help="所有賣出交易的總收款")
-            sa2.metric("📤 買入股本（累計 HKD）", f"HK${total_buy_hkd:,.2f}", help="所有買入交易的總投入")
-            sa3.metric("💹 現持倉市值（HKD）", f"HK${holdings_mv_hkd:,.2f}", help="按最新現價計算")
+            sa1, sa2, sa3, sa4 = st.columns(4)
+            sa1.metric("📥 賣出所得", f"HK${total_sell_hkd:,.2f}")
+            sa2.metric("📤 買入成本", f"HK${total_buy_hkd:,.2f}")
+            net_clr_sign = "+" if net_cash_flow >= 0 else ""
+            sa3.metric("💵 賣出−買入淨額", f"HK${net_cash_flow:,.2f}",
+                       delta=f"{net_clr_sign}{net_cash_flow:,.0f}", delta_color="normal")
+            sa4.metric("💹 現持倉市值", f"HK${holdings_mv_hkd:,.2f}")
 
             st.markdown("")
             asset_accs = list(st.session_state.my_assets.keys())
             if not asset_accs:
                 st.warning("⚠️ 尚未設定資產帳戶，請到「⚙️ 自訂資產/預算初始值」新增帳戶。")
             else:
-                sync_col1, sync_col2 = st.columns(2)
-                with sync_col1:
-                    target_acc_sell = st.selectbox("賣出所得存入帳戶", asset_accs, key="sync_sell_acc")
-                    if st.button("💰 將賣出所得同步入帳戶", use_container_width=True, key="btn_sync_sell"):
-                        st.session_state.my_assets[target_acc_sell] = float(
-                            st.session_state.my_assets.get(target_acc_sell, 0)
-                        ) + total_sell_hkd
+                target_acc = st.selectbox("選擇要同步的資產帳戶", asset_accs, key="sync_target_acc")
+                original_bal = float(st.session_state.my_assets.get(target_acc, 0))
+
+                # 模式 A：原有資本 + 賣出 − 買入（套現淨值）
+                new_val_cash = original_bal + net_cash_flow
+                # 模式 B：原有資本 + 賣出 − 買入 + 持倉市值（總資產值）
+                new_val_total = original_bal + net_cash_flow + holdings_mv_hkd
+
+                st.markdown(f"""
+                <div style="background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.25);border-radius:12px;padding:14px 18px;margin-bottom:12px">
+                <div style="font-size:13px;color:#a0aec0;margin-bottom:8px">帳戶：<b style="color:#e2e8f0">{target_acc}</b> ｜ 原有餘額：<b style="color:#e2e8f0">HK${original_bal:,.2f}</b></div>
+                <div style="display:flex;gap:32px;flex-wrap:wrap">
+                  <div>
+                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 A｜原資本 + 賣出−買入</div>
+                    <div style="font-size:22px;font-weight:700;color:#00d4aa">HK${new_val_cash:,.2f}</div>
+                    <div style="font-size:11px;color:#718096">適合：已全部套現，計算現金淨值</div>
+                  </div>
+                  <div>
+                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 B｜原資本 + 賣出−買入 + 持倉市值</div>
+                    <div style="font-size:22px;font-weight:700;color:#3b82f6">HK${new_val_total:,.2f}</div>
+                    <div style="font-size:11px;color:#718096">適合：仍有持倉，計算總投資資產值</div>
+                  </div>
+                </div>
+                </div>
+                """, unsafe_allow_html=True)
+
+                btn1, btn2 = st.columns(2)
+                with btn1:
+                    if st.button(f"💵 套用方案 A（HK${new_val_cash:,.2f}）", use_container_width=True, key="btn_sync_cash"):
+                        st.session_state.my_assets[target_acc] = new_val_cash
                         save_now()
-                        st.success(f"✅ 已將賣出所得 HK${total_sell_hkd:,.2f} 加入【{target_acc_sell}】")
+                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_cash:,.2f}（原資本 {original_bal:,.0f} + 淨現金流 {net_cash_flow:,.0f}）")
+                        st.rerun()
+                with btn2:
+                    if st.button(f"📊 套用方案 B（HK${new_val_total:,.2f}）", use_container_width=True, key="btn_sync_total"):
+                        st.session_state.my_assets[target_acc] = new_val_total
+                        save_now()
+                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_total:,.2f}（含持倉市值）")
                         st.rerun()
 
-                with sync_col2:
-                    target_acc_mv = st.selectbox("持倉市值同步至帳戶", asset_accs, key="sync_mv_acc")
-                    if st.button("📊 將現持倉市值同步入帳戶", use_container_width=True, key="btn_sync_mv"):
-                        st.session_state.my_assets[target_acc_mv] = holdings_mv_hkd
-                        save_now()
-                        st.success(f"✅ 已將持倉市值 HK${holdings_mv_hkd:,.2f} 設定至【{target_acc_mv}】（覆蓋舊值）")
-                        st.rerun()
-
-                st.info("""
-💡 **使用提示**：
-- **賣出所得同步**：累加賣出現金到帳戶（如銀行儲蓄），適合記錄套現所得。
-- **持倉市值同步**：直接將帳戶餘額更新為現持倉市值（覆蓋），適合「投資帳戶 📈」欄位。
-- 建議設立獨立「投資帳戶 📈」帳戶，避免與日常現金混淆。
-                """)
             st.markdown("---")
 
             pie_col1, pie_col2 = st.columns(2)
