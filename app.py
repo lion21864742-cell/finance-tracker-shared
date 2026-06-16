@@ -71,6 +71,16 @@ def get_default_data():
         "savings_goal_name": "儲蓄目標"
     }
 
+# ==================== 安全數字轉換 ====================
+def safe_float(val, default=0.0):
+    """安全地將任何值轉為 float，防止 None / '' / 異常格式導致 TypeError"""
+    try:
+        if val is None:
+            return default
+        return float(val)
+    except (TypeError, ValueError):
+        return default
+
 # ==================== Page Config ====================
 st.set_page_config(page_title="💎 Cloud Finance Ultimate 2026", page_icon="💰", layout="wide")
 
@@ -366,7 +376,7 @@ if st.session_state.uid is None:
             st.session_state.my_trades = data.get("trades", [])
             st.session_state.my_holdings_prices = data.get("holdings_prices", {})
             st.session_state.my_crypto = data.get("crypto_holdings", [])
-            st.session_state.my_savings_goal = float(data.get("savings_goal", 0.0))
+            st.session_state.my_savings_goal = safe_float(data.get("savings_goal"), 0.0)
             st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
 
 # ==================== 登入/註冊 ====================
@@ -398,7 +408,7 @@ if st.session_state.uid is None:
                     st.session_state.my_trades = data.get("trades", [])
                     st.session_state.my_holdings_prices = data.get("holdings_prices", {})
                     st.session_state.my_crypto = data.get("crypto_holdings", [])
-                    st.session_state.my_savings_goal = float(data.get("savings_goal", 0.0))
+                    st.session_state.my_savings_goal = safe_float(data.get("savings_goal"), 0.0)
                     st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
@@ -1285,7 +1295,7 @@ elif page_choice == "🔔 智能提醒中心":
     with sg_col1:
         new_goal_name = st.text_input("目標名稱", value=st.session_state.my_savings_goal_name, key="goal_name_input")
     with sg_col2:
-        new_goal_amt = st.number_input("目標金額 (HK$)", value=float(st.session_state.my_savings_goal),
+        new_goal_amt = st.number_input("目標金額 (HK$)", value=safe_float(st.session_state.my_savings_goal),
                                         min_value=0.0, step=1000.0, key="goal_amt_input")
     with sg_col3:
         st.markdown("<br>", unsafe_allow_html=True)
@@ -1296,7 +1306,7 @@ elif page_choice == "🔔 智能提醒中心":
             st.success("✅ 目標已儲存！")
             st.rerun()
 
-    goal = float(st.session_state.my_savings_goal)
+    goal = safe_float(st.session_state.my_savings_goal)
     if goal > 0:
         progress_pct = min(expected_savings / goal * 100, 100) if goal > 0 else 0
         prog_clr = "#1D9E75" if progress_pct >= 80 else "#EF9F27" if progress_pct >= 40 else "#E24B4A"
