@@ -932,34 +932,28 @@ elif page_choice == "📈 投資持倉記錄":
             # ══ 同步資產帳戶 ══
             st.markdown("---")
             st.markdown("#### 🏦 同步入資產帳戶")
-            st.caption("公式：帳戶新值 = 原有資本 + 賣出所得 − 買入成本 + 現持倉市值")
+            st.caption("公式：帳戶新值 = 原有資本 + 已實現盈虧（FIFO配對的真實獲利/虧損） + 現持倉市值")
+            st.caption("💡 改用「已實現盈虧」而非「賣出−買入」，避免未賣出持倉的買入成本被誤判為虧損。")
 
-            # 計算各項數值（全部轉 HKD）
-            all_trades = st.session_state.get("my_trades", [])
+            # 已實現盈虧（FIFO配對後的真實獲利，已轉換為 HKD）
+            realized_map_sync = get_realized_pnl_map(st.session_state.my_trades)
             sync_fx = usd_to_hkd
-
-            total_buy_hkd = sum(
-                float(t.get("成交金額",0)) * (sync_fx if t.get("幣別","USD") == "USD" else 1)
-                for t in all_trades if t.get("類型","") == "買入"
+            total_realized_hkd = sum(
+                v * (sync_fx if not k.endswith(".HK") else 1)
+                for k, v in realized_map_sync.items()
             )
-            total_sell_hkd = sum(
-                float(t.get("成交金額",0)) * (sync_fx if t.get("幣別","USD") == "USD" else 1)
-                for t in all_trades if t.get("類型","") == "賣出"
-            )
-            # 淨現金流 = 賣出 - 買入（正數=賺錢取回現金，負數=仍有資金鎖在持倉）
-            net_cash_flow = total_sell_hkd - total_buy_hkd
             holdings_mv_hkd = (
                 sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="USD") * sync_fx
                 + sum(float(h.get("市值",0)) for h in st.session_state.my_holdings if h.get("幣別","USD")=="HKD")
             )
 
-            sa1, sa2, sa3, sa4 = st.columns(4)
-            sa1.metric("📥 賣出所得", f"HK${total_sell_hkd:,.2f}")
-            sa2.metric("📤 買入成本", f"HK${total_buy_hkd:,.2f}")
-            net_clr_sign = "+" if net_cash_flow >= 0 else ""
-            sa3.metric("💵 賣出−買入淨額", f"HK${net_cash_flow:,.2f}",
-                       delta=f"{net_clr_sign}{net_cash_flow:,.0f}", delta_color="normal")
-            sa4.metric("💹 現持倉市值", f"HK${holdings_mv_hkd:,.2f}")
+            sa1, sa2 = st.columns(2)
+            real_sign = "+" if total_realized_hkd >= 0 else ""
+            sa1.metric("✅ 已實現盈虧（HKD）", f"HK${total_realized_hkd:,.2f}",
+                       delta=f"{real_sign}{total_realized_hkd:,.0f}", delta_color="normal",
+                       help="所有已賣出股票的真實獲利/虧損（FIFO配對計算）")
+            sa2.metric("💹 現持倉市值（HKD）", f"HK${holdings_mv_hkd:,.2f}",
+                       help="未賣出股票按現價計算的市值")
 
             st.markdown("")
             asset_accs = list(st.session_state.my_assets.keys())
@@ -969,24 +963,24 @@ elif page_choice == "📈 投資持倉記錄":
                 target_acc = st.selectbox("選擇要同步的資產帳戶", asset_accs, key="sync_target_acc")
                 original_bal = float(st.session_state.my_assets.get(target_acc, 0))
 
-                # 模式 A：原有資本 + 賣出 − 買入（套現淨值）
-                new_val_cash = original_bal + net_cash_flow
-                # 模式 B：原有資本 + 賣出 − 買入 + 持倉市值（總資產值）
-                new_val_total = original_bal + net_cash_flow + holdings_mv_hkd
+                # 方案 A：原資本 + 已實現盈虧（已套現的真實獲利，不含未賣出持倉）
+                new_val_cash = original_bal + total_realized_hkd
+                # 方案 B：原資本 + 已實現盈虧 + 現持倉市值（總投資資產值，含未賣出部分）
+                new_val_total = original_bal + total_realized_hkd + holdings_mv_hkd
 
                 st.markdown(f"""
                 <div style="background:rgba(0,212,170,0.07);border:1px solid rgba(0,212,170,0.25);border-radius:12px;padding:14px 18px;margin-bottom:12px">
                 <div style="font-size:13px;color:#a0aec0;margin-bottom:8px">帳戶：<b style="color:#e2e8f0">{target_acc}</b> ｜ 原有餘額：<b style="color:#e2e8f0">HK${original_bal:,.2f}</b></div>
                 <div style="display:flex;gap:32px;flex-wrap:wrap">
                   <div>
-                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 A｜原資本 + 賣出−買入</div>
+                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 A｜原資本 + 已實現盈虧</div>
                     <div style="font-size:22px;font-weight:700;color:#00d4aa">HK${new_val_cash:,.2f}</div>
-                    <div style="font-size:11px;color:#718096">適合：已全部套現，計算現金淨值</div>
+                    <div style="font-size:11px;color:#718096">適合：只記錄已套現的真實獲利，不計未賣出持倉</div>
                   </div>
                   <div>
-                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 B｜原資本 + 賣出−買入 + 持倉市值</div>
+                    <div style="font-size:11px;color:#718096;text-transform:uppercase;letter-spacing:0.05em">方案 B｜原資本 + 已實現盈虧 + 持倉市值</div>
                     <div style="font-size:22px;font-weight:700;color:#3b82f6">HK${new_val_total:,.2f}</div>
-                    <div style="font-size:11px;color:#718096">適合：仍有持倉，計算總投資資產值</div>
+                    <div style="font-size:11px;color:#718096">適合：仍有持倉，計算總投資資產值（最完整）</div>
                   </div>
                 </div>
                 </div>
@@ -997,13 +991,13 @@ elif page_choice == "📈 投資持倉記錄":
                     if st.button(f"💵 套用方案 A（HK${new_val_cash:,.2f}）", use_container_width=True, key="btn_sync_cash"):
                         st.session_state.my_assets[target_acc] = new_val_cash
                         save_now()
-                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_cash:,.2f}（原資本 {original_bal:,.0f} + 淨現金流 {net_cash_flow:,.0f}）")
+                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_cash:,.2f}（原資本 {original_bal:,.0f} + 已實現盈虧 {total_realized_hkd:,.0f}）")
                         st.rerun()
                 with btn2:
                     if st.button(f"📊 套用方案 B（HK${new_val_total:,.2f}）", use_container_width=True, key="btn_sync_total"):
                         st.session_state.my_assets[target_acc] = new_val_total
                         save_now()
-                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_total:,.2f}（含持倉市值）")
+                        st.success(f"✅ 【{target_acc}】已更新為 HK${new_val_total:,.2f}（含現持倉市值）")
                         st.rerun()
 
             st.markdown("---")
@@ -1125,14 +1119,29 @@ elif page_choice == "📈 投資持倉記錄":
 
             buy_df = filtered[filtered["類型"]=="買入"]
             sell_df = filtered[filtered["類型"]=="賣出"]
-            total_buy = float(buy_df["成交金額"].sum()) if not buy_df.empty else 0.0
-            total_sell = float(sell_df["成交金額"].sum()) if not sell_df.empty else 0.0
+
+            # 修正：分幣別計算，避免 USD/HKD 直接相加造成數字失真
+            _fx_disp = st.session_state.get("fx_rate", 7.80)
+            def _sum_hkd(d):
+                if d.empty: return 0.0
+                usd_part = d[d["幣別"]=="USD"]["成交金額"].sum() if "幣別" in d.columns else 0.0
+                hkd_part = d[d["幣別"]=="HKD"]["成交金額"].sum() if "幣別" in d.columns else 0.0
+                return float(usd_part)*_fx_disp + float(hkd_part)
+
+            total_buy_usd = float(buy_df[buy_df["幣別"]=="USD"]["成交金額"].sum()) if not buy_df.empty and "幣別" in buy_df.columns else 0.0
+            total_buy_hkd_raw = float(buy_df[buy_df["幣別"]=="HKD"]["成交金額"].sum()) if not buy_df.empty and "幣別" in buy_df.columns else 0.0
+            total_sell_usd = float(sell_df[sell_df["幣別"]=="USD"]["成交金額"].sum()) if not sell_df.empty and "幣別" in sell_df.columns else 0.0
+            total_sell_hkd_raw = float(sell_df[sell_df["幣別"]=="HKD"]["成交金額"].sum()) if not sell_df.empty and "幣別" in sell_df.columns else 0.0
+            total_buy = _sum_hkd(buy_df)   # 統一換算為 HKD 顯示
+            total_sell = _sum_hkd(sell_df)
 
             s1,s2,s3,s4 = st.columns(4)
-            s1.metric("📈 買入總額", f"{total_buy:,.2f}")
-            s2.metric("📉 賣出總額", f"{total_sell:,.2f}")
+            s1.metric("📈 買入總額 (HKD換算)", f"{total_buy:,.2f}")
+            s2.metric("📉 賣出總額 (HKD換算)", f"{total_sell:,.2f}")
             s3.metric("📋 交易筆數", f"{len(filtered)} 筆")
             s4.metric("📌 持倉股數", f"{len(st.session_state.my_holdings)} 隻")
+            if total_buy_usd > 0 or total_sell_usd > 0:
+                st.caption(f"💡 原幣明細 — 買入：USD ${total_buy_usd:,.2f} + HKD ${total_buy_hkd_raw:,.2f} ｜ 賣出：USD ${total_sell_usd:,.2f} + HKD ${total_sell_hkd_raw:,.2f}（匯率 {_fx_disp:.2f}）")
 
             th1,th2,th3,th4,th5,th6,th7,th8,th9 = st.columns([1.2,1.8,0.8,0.7,0.8,1,1,0.9,0.5])
             th1.markdown("**日期**"); th2.markdown("**名稱**"); th3.markdown("**類型**")
