@@ -1708,68 +1708,87 @@ elif page_choice == "🤖 AI 理財建議":
         horizontal=True)
     custom_q = st.text_input("或輸入自訂問題（可空白）", placeholder="例如：我應該增持還是減持現有倉位？")
 
-    if st.button("🤖 獲取 AI 建議", use_container_width=True):
-        mode_prompts = {
-            "📊 整體財務健康評估": "請根據以下財務數據，對用戶的整體財務健康狀況作出評估，包括：資產負債比例分析、儲蓄率評價、風險提示，以及3個具體可行的改善建議。請用繁體中文回答，語氣親切專業。",
-            "💡 儲蓄改善建議": "請根據以下財務數據，分析用戶的支出結構，找出可以削減的開支項目，並提供具體的儲蓄行動計劃。目標是提升儲蓄率。請用繁體中文回答。",
-            "📈 投資持倉分析": "請根據以下持倉數據，分析投資組合的風險分佈、個股表現，並提供調倉或加減倉的參考建議。注意提醒這只是參考，非投資建議。請用繁體中文回答。",
-            "🎯 月度預算優化": "請根據以下財務數據，為用戶制定一個更優化的月度預算分配方案，並解釋每個預算類別應佔收入的合理比例。請用繁體中文回答。"
-        }
-        prompt = mode_prompts.get(ai_mode, "請分析以下財務狀況並提供建議。")
-        if custom_q.strip():
-            prompt = f"請用繁體中文回答以下問題：{custom_q.strip()}\n\n參考財務數據如下："
-        full_prompt = f"{prompt}\n\n{fin_summary}"
+    mode_prompts = {
+        "📊 整體財務健康評估": "請根據以下財務數據，對用戶的整體財務健康狀況作出評估，包括：資產負債比例分析、儲蓄率評價、風險提示，以及3個具體可行的改善建議。請用繁體中文回答，語氣親切專業。",
+        "💡 儲蓄改善建議": "請根據以下財務數據，分析用戶的支出結構，找出可以削減的開支項目，並提供具體的儲蓄行動計劃。目標是提升儲蓄率。請用繁體中文回答。",
+        "📈 投資持倉分析": "請根據以下持倉數據，分析投資組合的風險分佈、個股表現，並提供調倉或加減倉的參考建議。注意提醒這只是參考，非投資建議。請用繁體中文回答。",
+        "🎯 月度預算優化": "請根據以下財務數據，為用戶制定一個更優化的月度預算分配方案，並解釋每個預算類別應佔收入的合理比例。請用繁體中文回答。"
+    }
+    prompt = mode_prompts.get(ai_mode, "請分析以下財務狀況並提供建議。")
+    if custom_q.strip():
+        prompt = f"請用繁體中文回答以下問題：{custom_q.strip()}\n\n參考財務數據如下："
+    full_prompt = f"{prompt}\n\n{fin_summary}"
 
-        with st.spinner("🤖 AI 正在分析您的財務狀況…"):
-            try:
-                # 獲取 API Key（先從 secrets，再讓用戶輸入）
+    # 檢查是否有 API Key
+    try:
+        anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
+    except Exception:
+        anthropic_key = st.session_state.get("anthropic_api_key_input", "")
+
+    tab_free, tab_api = st.tabs(["🆓 免費方式（複製到 Claude.ai）", "⚡ 自動 API（需付費 Key）"])
+
+    with tab_free:
+        st.info("💡 完全免費！按下方按鈕複製財務摘要，貼到 [claude.ai](https://claude.ai) 聊天視窗即可獲得 AI 建議，無需 API Key。")
+        st.text_area("📋 點擊右上角複製圖示，複製以下內容貼到 Claude.ai：",
+                     value=full_prompt, height=280, key="copy_prompt_area")
+        st.markdown("""
+        <a href="https://claude.ai/new" target="_blank">
+        <button style="width:100%;padding:12px;background:#00d4aa;color:#0a0e14;border:none;
+        border-radius:8px;font-weight:700;font-size:15px;cursor:pointer;margin-top:8px">
+        🚀 開啟 Claude.ai（在新視窗貼上內容）
+        </button>
+        </a>
+        """, unsafe_allow_html=True)
+        st.caption("步驟：① 複製上方文字框內容 → ② 按綠色按鈕開啟 Claude.ai → ③ 貼上並送出")
+
+    with tab_api:
+        if not anthropic_key:
+            st.warning("⚠️ 尚未設定 API Key。如想使用自動分析（按一下立即在本頁顯示結果），可在下方輸入，"
+                      "或在 Streamlit Secrets 設定 `ANTHROPIC_API_KEY`。這是**付費功能**（每次約 $0.01-0.05 美金）。")
+        if st.button("🤖 獲取 AI 建議（自動分析）", use_container_width=True, disabled=not bool(anthropic_key)):
+            with st.spinner("🤖 AI 正在分析您的財務狀況…"):
                 try:
-                    anthropic_key = st.secrets["ANTHROPIC_API_KEY"]
-                except Exception:
-                    anthropic_key = st.session_state.get("anthropic_api_key_input", "")
+                    response = requests.post(
+                        "https://api.anthropic.com/v1/messages",
+                        headers={
+                            "Content-Type": "application/json",
+                            "x-api-key": anthropic_key,
+                            "anthropic-version": "2023-06-01",
+                        },
+                        json={
+                            "model": "claude-sonnet-4-6",
+                            "max_tokens": 1200,
+                            "system": "你是一位專業的香港個人理財顧問，擅長分析用戶財務數據並提供實用建議。回答要具體、有條理，使用繁體中文，適當使用emoji讓內容更易讀。",
+                            "messages": [{"role": "user", "content": full_prompt}]
+                        },
+                        timeout=30
+                    )
+                    data = response.json()
+                    if "error" in data:
+                        err_msg = data["error"].get("message", str(data["error"]))
+                        st.error(f"❌ API 錯誤：{err_msg}")
+                    elif "content" in data and data["content"]:
+                        ai_text = data["content"][0].get("text", "（AI 未返回內容）")
+                        st.markdown(f'<div class="ai-card">{ai_text.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
+                    else:
+                        st.error(f"❌ 未預期的回應格式：{data}")
+                except requests.exceptions.Timeout:
+                    st.error("❌ 請求超時，請稍後再試。")
+                except Exception as e:
+                    st.error(f"❌ AI 請求失敗：{e}")
 
-                if not anthropic_key:
-                    st.warning("⚠️ 請先在下方輸入 Anthropic API Key，或在 Streamlit Secrets 中設定 `ANTHROPIC_API_KEY`。")
-                    st.stop()
-
-                response = requests.post(
-                    "https://api.anthropic.com/v1/messages",
-                    headers={
-                        "Content-Type": "application/json",
-                        "x-api-key": anthropic_key,
-                        "anthropic-version": "2023-06-01",
-                    },
-                    json={
-                        "model": "claude-sonnet-4-6",
-                        "max_tokens": 1200,
-                        "system": "你是一位專業的香港個人理財顧問，擅長分析用戶財務數據並提供實用建議。回答要具體、有條理，使用繁體中文，適當使用emoji讓內容更易讀。",
-                        "messages": [{"role": "user", "content": full_prompt}]
-                    },
-                    timeout=30
-                )
-                data = response.json()
-                if "error" in data:
-                    err_msg = data["error"].get("message", str(data["error"]))
-                    st.error(f"❌ API 錯誤：{err_msg}")
-                elif "content" in data and data["content"]:
-                    ai_text = data["content"][0].get("text", "（AI 未返回內容）")
-                    st.markdown(f'<div class="ai-card">{ai_text.replace(chr(10), "<br>")}</div>', unsafe_allow_html=True)
-                else:
-                    st.error(f"❌ 未預期的回應格式：{data}")
-            except requests.exceptions.Timeout:
-                st.error("❌ 請求超時，請稍後再試。")
-            except Exception as e:
-                st.error(f"❌ AI 請求失敗：{e}")
+        st.markdown("---")
+        with st.expander("🔑 API Key 設定", expanded=False):
+            st.caption("如 Streamlit Secrets 中已設定 `ANTHROPIC_API_KEY`，無需在此填寫。")
+            api_key_input = st.text_input("Anthropic API Key", type="password",
+                                           value=st.session_state.get("anthropic_api_key_input",""),
+                                           key="api_key_field", placeholder="sk-ant-...")
+            if st.button("💾 儲存 Key（僅本次會話）", use_container_width=True):
+                st.session_state["anthropic_api_key_input"] = api_key_input
+                st.success("✅ API Key 已儲存（不會上傳至雲端）")
+                st.rerun()
 
     st.markdown("---")
-    with st.expander("🔑 API Key 設定（首次使用需填寫）", expanded=False):
-        st.caption("如 Streamlit Secrets 中已設定 `ANTHROPIC_API_KEY`，無需在此填寫。")
-        api_key_input = st.text_input("Anthropic API Key", type="password",
-                                       value=st.session_state.get("anthropic_api_key_input",""),
-                                       key="api_key_field", placeholder="sk-ant-...")
-        if st.button("💾 儲存 Key（僅本次會話）", use_container_width=True):
-            st.session_state["anthropic_api_key_input"] = api_key_input
-            st.success("✅ API Key 已儲存（不會上傳至雲端）")
     st.caption("⚠️ AI 建議僅供參考，不構成投資或財務建議。重大財務決定請諮詢專業顧問。")
 
 # ══════════════════════════════════════════════════════
