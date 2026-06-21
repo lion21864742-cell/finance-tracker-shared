@@ -518,6 +518,17 @@ _holdings_hkd_mv = sum(float(h.get("市值") or 0) for h in _holdings if h.get("
 holdings_total_value = _holdings_usd_mv * _fx + _holdings_hkd_mv
 net_worth = total_assets - total_liabilities + holdings_total_value
 
+# ── 重複計算偵測：投資帳戶若已存有「同步」進去的持倉市值，
+#    淨身家公式會把 holdings_total_value 加多一次 ──
+_invest_acc_name = "投資帳戶 📈"
+_invest_acc_val = float(st.session_state.my_assets.get(_invest_acc_name, 0) or 0)
+_possible_double_count = (
+    _invest_acc_name in st.session_state.my_assets
+    and _invest_acc_val > 0
+    and holdings_total_value > 0
+    and abs(_invest_acc_val - holdings_total_value) < max(holdings_total_value * 0.5, 5000)
+)
+
 df_current_logs = pd.DataFrame(st.session_state.my_logs) if st.session_state.my_logs else pd.DataFrame()
 total_actual_income = 0.0
 total_actual_expense = 0.0
@@ -625,6 +636,29 @@ with m2_col4:
                 delta=f"↑ {_pnl_sign}{fmt_by_mode(abs(_net_pnl),'')}" if _net_pnl>=0 else f"↓ {fmt_by_mode(abs(_net_pnl),'')}",
                 delta_color="#00d4aa" if _net_pnl>=0 else "#E24B4A")
 st.markdown("---")
+
+# ── 重複計算警示 ──
+if _possible_double_count:
+    st.warning(f"""
+⚠️ **偵測到可能的重複計算！**
+
+你的「{_invest_acc_name}」帳戶餘額為 **HK${_invest_acc_val:,.0f}**，與目前持倉市值
+**HK${holdings_total_value:,.0f}** 非常接近——這通常是因為你曾使用「投資持倉記錄」頁的
+「同步入資產帳戶」功能，把持倉市值存入了此帳戶。
+
+但系統的「淨身家」公式會**自動即時加總**持倉市值，如果「{_invest_acc_name}」裡也存了同一筆錢，
+就會**被計算兩次**，導致總資產/淨身家虛高。
+    """)
+    fix_col1, fix_col2 = st.columns([1, 2])
+    with fix_col1:
+        if st.button(f"🔧 一鍵修正：將「{_invest_acc_name}」歸零", use_container_width=True, type="primary"):
+            st.session_state.my_assets[_invest_acc_name] = 0.0
+            save_now()
+            st.success(f"✅ 已將「{_invest_acc_name}」設為 0，持倉市值現在只會由系統自動計算一次。")
+            st.rerun()
+    with fix_col2:
+        st.caption("修正後，「投資帳戶 📈」只用作存放其他非持倉相關的投資現金（如未投入的資金），股票/加密資產市值會由系統自動加總，無需手動同步。")
+    st.markdown("---")
 
 # ==================== 側邊欄 ====================
 st.sidebar.title("Menu 功能選單")
@@ -972,6 +1006,9 @@ elif page_choice == "📈 投資持倉記錄":
             st.markdown("#### 🏦 同步入資產帳戶")
             st.caption("公式：帳戶新值 = 原有資本 + 已實現盈虧（FIFO配對的真實獲利/虧損） + 現持倉市值")
             st.caption("💡 改用「已實現盈虧」而非「賣出−買入」，避免未賣出持倉的買入成本被誤判為虧損。")
+            st.error("⚠️ **注意重複計算**：系統的「淨身家」會自動即時加總持倉市值。若使用「方案 B」把持倉市值同步入帳戶，"
+                     "之後「財務總覽」頁會把持倉市值**算兩次**。建議只使用「方案 A」（不含持倉市值），"
+                     "或同步後到「財務總覽」頁查看是否出現重複計算警示。")
 
             # 已實現盈虧（FIFO配對後的真實獲利，已轉換為 HKD）
             realized_map_sync = get_realized_pnl_map(st.session_state.my_trades)
@@ -1898,8 +1935,48 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
     with col_s1:
         st.write("### 🟢 資產帳戶餘額")
         for k, v in list(st.session_state.my_assets.items()):
-            new_val = st.number_input(f"【{k}】", value=float(v), key=f"asset_input_{k}")
-            if new_val != v: st.session_state.my_assets[k] = new_val; save_now()
+            arow1, arow2, arow3 = st.columns([3, 0.7, 0.7])
+            with arow1:
+                new_val = st.number_input(f"【{k}】", value=float(v), key=f"asset_input_{k}")
+                if new_val != v:
+                    st.session_state.my_assets[k] = new_val; save_now()
+            with arow2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("✏️", key=f"rename_asset_btn_{k}", help="重新命名", use_container_width=True):
+                    st.session_state[f"renaming_asset_{k}"] = True
+            with arow3:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"del_asset_btn_{k}", help="刪除帳戶", use_container_width=True):
+                    if len(st.session_state.my_assets) > 1:
+                        del st.session_state.my_assets[k]
+                        save_now(); st.success(f"✅ 已刪除「{k}」"); st.rerun()
+                    else:
+                        st.warning("⚠️ 至少保留一個資產帳戶！")
+
+            if st.session_state.get(f"renaming_asset_{k}", False):
+                with st.form(key=f"rename_asset_form_{k}"):
+                    rn_col1, rn_col2, rn_col3 = st.columns([3, 1, 1])
+                    new_name = rn_col1.text_input("新名稱", value=k, key=f"rename_asset_input_{k}", label_visibility="collapsed")
+                    confirm_rn = rn_col2.form_submit_button("✅ 確認", use_container_width=True)
+                    cancel_rn = rn_col3.form_submit_button("✕ 取消", use_container_width=True)
+                    if confirm_rn:
+                        new_name = new_name.strip()
+                        if new_name and new_name != k and new_name not in st.session_state.my_assets:
+                            st.session_state.my_assets[new_name] = st.session_state.my_assets.pop(k)
+                            # 同步更新 logs / trades 等引用此帳戶名稱的記錄
+                            for log in st.session_state.get("my_logs", []):
+                                if log.get("帳戶/備註") == k:
+                                    log["帳戶/備註"] = new_name
+                            save_now()
+                            st.session_state[f"renaming_asset_{k}"] = False
+                            st.success(f"✅ 已重新命名為「{new_name}」"); st.rerun()
+                        elif new_name in st.session_state.my_assets:
+                            st.warning("⚠️ 此名稱已存在！")
+                        else:
+                            st.warning("⚠️ 名稱無效！")
+                    if cancel_rn:
+                        st.session_state[f"renaming_asset_{k}"] = False
+                        st.rerun()
         st.markdown("")
         new_asset_name = st.text_input("新增資產帳戶名稱", placeholder="例如：投資帳戶 📈", key="new_asset_name")
         if st.button("➕ 新增帳戶"):
@@ -1911,8 +1988,51 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         st.markdown("---")
         st.write("### 🔴 負債初始欠款")
         for k, v in list(st.session_state.my_liabilities.items()):
-            new_val = st.number_input(f"【{k}】", value=float(v), key=f"lia_input_{k}")
-            if new_val != v: st.session_state.my_liabilities[k] = new_val; save_now()
+            lrow1, lrow2, lrow3 = st.columns([3, 0.7, 0.7])
+            with lrow1:
+                new_val = st.number_input(f"【{k}】", value=float(v), key=f"lia_input_{k}")
+                if new_val != v:
+                    st.session_state.my_liabilities[k] = new_val; save_now()
+            with lrow2:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("✏️", key=f"rename_lia_btn_{k}", help="重新命名", use_container_width=True):
+                    st.session_state[f"renaming_lia_{k}"] = True
+            with lrow3:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("🗑️", key=f"del_lia_btn_{k}", help="刪除帳戶", use_container_width=True):
+                    if len(st.session_state.my_liabilities) > 1:
+                        del st.session_state.my_liabilities[k]
+                        save_now(); st.success(f"✅ 已刪除「{k}」"); st.rerun()
+                    else:
+                        st.warning("⚠️ 至少保留一個負債帳戶！")
+
+            if st.session_state.get(f"renaming_lia_{k}", False):
+                with st.form(key=f"rename_lia_form_{k}"):
+                    rl_col1, rl_col2, rl_col3 = st.columns([3, 1, 1])
+                    new_lname = rl_col1.text_input("新名稱", value=k, key=f"rename_lia_input_{k}", label_visibility="collapsed")
+                    confirm_rl = rl_col2.form_submit_button("✅ 確認", use_container_width=True)
+                    cancel_rl = rl_col3.form_submit_button("✕ 取消", use_container_width=True)
+                    if confirm_rl:
+                        new_lname = new_lname.strip()
+                        if new_lname and new_lname != k and new_lname not in st.session_state.my_liabilities:
+                            st.session_state.my_liabilities[new_lname] = st.session_state.my_liabilities.pop(k)
+                            save_now()
+                            st.session_state[f"renaming_lia_{k}"] = False
+                            st.success(f"✅ 已重新命名為「{new_lname}」"); st.rerun()
+                        elif new_lname in st.session_state.my_liabilities:
+                            st.warning("⚠️ 此名稱已存在！")
+                        else:
+                            st.warning("⚠️ 名稱無效！")
+                    if cancel_rl:
+                        st.session_state[f"renaming_lia_{k}"] = False
+                        st.rerun()
+        new_lia_name = st.text_input("新增負債帳戶名稱", placeholder="例如：車貸 🚗", key="new_lia_name")
+        if st.button("➕ 新增負債帳戶"):
+            if new_lia_name.strip() and new_lia_name.strip() not in st.session_state.my_liabilities:
+                st.session_state.my_liabilities[new_lia_name.strip()] = 0.0; save_now()
+                st.success(f"✅ 已新增"); st.rerun()
+            else:
+                st.warning("⚠️ 名稱無效或已存在！")
     with col_s2:
         st.write("### 🎯 每月預算上限")
         for cat, b_val in list(st.session_state.my_budget.items()):
