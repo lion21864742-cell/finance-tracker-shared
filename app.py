@@ -1988,16 +1988,20 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
         st.markdown("---")
         st.write("### 🔴 負債初始欠款")
         for k, v in list(st.session_state.my_liabilities.items()):
-            lrow1, lrow2, lrow3 = st.columns([3, 0.7, 0.7])
+            lrow1, lrow2, lrow3, lrow4 = st.columns([2.6, 0.7, 0.7, 0.7])
             with lrow1:
                 new_val = st.number_input(f"【{k}】", value=float(v), key=f"lia_input_{k}")
                 if new_val != v:
                     st.session_state.my_liabilities[k] = new_val; save_now()
             with lrow2:
                 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
+                if st.button("💵", key=f"repay_lia_btn_{k}", help="還款（直接扣減負債）", use_container_width=True):
+                    st.session_state[f"repaying_lia_{k}"] = True
+            with lrow3:
+                st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
                 if st.button("✏️", key=f"rename_lia_btn_{k}", help="重新命名", use_container_width=True):
                     st.session_state[f"renaming_lia_{k}"] = True
-            with lrow3:
+            with lrow4:
                 st.markdown("<div style='height:28px'></div>", unsafe_allow_html=True)
                 if st.button("🗑️", key=f"del_lia_btn_{k}", help="刪除帳戶", use_container_width=True):
                     if len(st.session_state.my_liabilities) > 1:
@@ -2005,6 +2009,46 @@ elif page_choice == "⚙️ 自訂您的資產/預算初始值":
                         save_now(); st.success(f"✅ 已刪除「{k}」"); st.rerun()
                     else:
                         st.warning("⚠️ 至少保留一個負債帳戶！")
+
+            if st.session_state.get(f"repaying_lia_{k}", False):
+                with st.form(key=f"repay_lia_form_{k}"):
+                    rp_col1, rp_col2, rp_col3, rp_col4 = st.columns([2, 1, 1, 1])
+                    repay_amt = rp_col1.number_input(
+                        "還款金額", min_value=0.0, max_value=float(v) if v > 0 else None,
+                        step=100.0, key=f"repay_amt_{k}", label_visibility="collapsed",
+                        placeholder="輸入還款金額"
+                    )
+                    deduct_from = rp_col2.selectbox(
+                        "扣自帳戶", list(st.session_state.my_assets.keys()) if st.session_state.my_assets else ["（無資產帳戶）"],
+                        key=f"repay_from_{k}", label_visibility="collapsed"
+                    )
+                    confirm_rp = rp_col3.form_submit_button("✅ 確認還款", use_container_width=True)
+                    cancel_rp = rp_col4.form_submit_button("✕ 取消", use_container_width=True)
+                    if confirm_rp:
+                        if repay_amt > 0:
+                            new_liab_val = max(0.0, float(v) - repay_amt)
+                            st.session_state.my_liabilities[k] = new_liab_val
+                            # 同步從選定資產帳戶扣除（如有效帳戶）
+                            if deduct_from in st.session_state.my_assets:
+                                st.session_state.my_assets[deduct_from] = float(
+                                    st.session_state.my_assets.get(deduct_from, 0)
+                                ) - repay_amt
+                            # 記錄一筆支出log，方便日後查帳
+                            st.session_state.my_logs.append({
+                                "日期": datetime.now().strftime("%Y/%m/%d"),
+                                "類型": "支出 💸", "分類": "其他支出", "子分類": "還款",
+                                "項目": f"還款：{k}", "金額": float(repay_amt),
+                                "帳戶/備註": deduct_from if deduct_from in st.session_state.my_assets else "未指定帳戶"
+                            })
+                            save_now()
+                            st.session_state[f"repaying_lia_{k}"] = False
+                            st.success(f"✅ 已還款 HK${repay_amt:,.2f}，「{k}」餘額：HK${new_liab_val:,.2f}")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ 請輸入大於 0 的還款金額！")
+                    if cancel_rp:
+                        st.session_state[f"repaying_lia_{k}"] = False
+                        st.rerun()
 
             if st.session_state.get(f"renaming_lia_{k}", False):
                 with st.form(key=f"rename_lia_form_{k}"):
