@@ -535,18 +535,38 @@ if not df_current_logs.empty:
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
 
-# ==================== 智能數字格式化 ====================
+# ==================== 智能數字格式化（支援雙模式）====================
 def fmt(val: float, prefix: str = "$") -> str:
+    """完整數字模式：含千位分隔符，不簡寫。"""
+    sign = "-" if val < 0 else ""
+    return f"{sign}{prefix}{abs(val):,.0f}"
+
+def fmt_compact(val: float, prefix: str = "$") -> str:
+    """簡化模式：大數字用 K / M 簡寫。"""
     abs_val = abs(val)
     sign = "-" if val < 0 else ""
     if abs_val >= 1_000_000:
-        return f"{sign}{prefix}{abs_val/1_000_000:.1f}M"
-    elif abs_val >= 100_000:
-        return f"{sign}{prefix}{abs_val/1000:.0f}K"
+        return f"{sign}{prefix}{abs_val/1_000_000:.2f}M"
     elif abs_val >= 10_000:
         return f"{sign}{prefix}{abs_val/1000:.1f}K"
     else:
         return f"{sign}{prefix}{abs_val:,.0f}"
+
+def fmt_by_mode(val: float, prefix: str = "$") -> str:
+    if st.session_state.get("display_mode", "完整數字") == "簡化 (K/M)":
+        return fmt_compact(val, prefix)
+    return fmt(val, prefix)
+
+def metric_card(label: str, value: str, delta: str = None, delta_color: str = "#00d4aa"):
+    """自訂 HTML 指標卡，完全控制顯示格式，避免 st.metric 自動壓縮數字。"""
+    delta_html = f'<div style="font-size:13px;color:{delta_color};margin-top:4px">{delta}</div>' if delta else ""
+    st.markdown(f"""
+    <div style="background:rgba(255,255,255,0.03);border:1px solid rgba(255,255,255,0.1);border-radius:12px;padding:14px 18px;height:100%">
+      <div style="font-size:13px;color:#a0aec0;margin-bottom:6px">{label}</div>
+      <div style="font-size:26px;font-weight:700;color:#f7fafc;word-break:break-word">{value}</div>
+      {delta_html}
+    </div>
+    """, unsafe_allow_html=True)
 
 # ==================== 頁面標題 ====================
 st.title("💎 CLOUD FINANCE MASTER PLAN 2026")
@@ -566,26 +586,44 @@ with col_logout:
 
 st.markdown("---")
 
+# ── 顯示模式切換 ──
+mode_col1, mode_col2 = st.columns([3, 1])
+with mode_col2:
+    if "display_mode" not in st.session_state:
+        st.session_state.display_mode = "完整數字"
+    st.radio(
+        "數字顯示模式", ["完整數字", "簡化 (K/M)"],
+        horizontal=True, label_visibility="collapsed",
+        key="display_mode"
+    )
+
 m_col1, m_col2, m_col3, m_col4 = st.columns(4)
-m_col1.metric("💰 本月收入", fmt(total_actual_income))
-m_col2.metric("💸 本月支出", fmt(total_actual_expense))
-m_col3.metric("📈 預計儲蓄", fmt(expected_savings), delta=f"儲蓄率 {savings_rate:.1f}%")
-_nw_delta = f"含持倉 {fmt(holdings_total_value,'HK$')}" if holdings_total_value > 0 else None
-m_col4.metric("👑 淨身家", fmt(net_worth, "HK$"), delta=_nw_delta)
+with m_col1:
+    metric_card("💰 本月收入", fmt_by_mode(total_actual_income))
+with m_col2:
+    metric_card("💸 本月支出", fmt_by_mode(total_actual_expense))
+with m_col3:
+    metric_card("📈 預計儲蓄", fmt_by_mode(expected_savings), delta=f"↑ 儲蓄率 {savings_rate:.1f}%")
+with m_col4:
+    _nw_delta = f"↑ 含持倉 {fmt_by_mode(holdings_total_value,'HK$')}" if holdings_total_value > 0 else None
+    metric_card("👑 淨身家", fmt_by_mode(net_worth, "HK$"), delta=_nw_delta)
 
 st.markdown("")
 m2_col1, m2_col2, m2_col3, m2_col4 = st.columns(4)
-m2_col1.metric("🏦 總資產", fmt(total_assets, "HK$"))
-m2_col2.metric("💳 總負債", fmt(total_liabilities, "HK$"),
-               delta=f"-{(total_liabilities/total_assets*100):.1f}% 負債比" if total_assets > 0 else None,
-               delta_color="inverse")
-m2_col3.metric("📈 持倉市值", fmt(holdings_total_value, "HK$"),
-               delta=f"US${fmt(_holdings_usd_mv)} HK${fmt(_holdings_hkd_mv)}" if _holdings else None,
-               delta_color="off")
-_net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
-m2_col4.metric("💹 持倉盈虧", fmt(_net_pnl, "HK$"),
-               delta=f"{'+'if _net_pnl>=0 else ''}{fmt(abs(_net_pnl),'')}",
-               delta_color="normal")
+with m2_col1:
+    metric_card("🏦 總資產", fmt_by_mode(total_assets, "HK$"))
+with m2_col2:
+    _liab_delta = f"↓ {(total_liabilities/total_assets*100):.1f}% 負債比" if total_assets > 0 else None
+    metric_card("💳 總負債", fmt_by_mode(total_liabilities, "HK$"), delta=_liab_delta, delta_color="#E24B4A")
+with m2_col3:
+    _mv_delta = f"US{fmt_by_mode(_holdings_usd_mv)} ・ HK{fmt_by_mode(_holdings_hkd_mv)}" if _holdings else None
+    metric_card("📈 持倉市值", fmt_by_mode(holdings_total_value, "HK$"), delta=_mv_delta, delta_color="#a0aec0")
+with m2_col4:
+    _net_pnl = sum(float(h.get("盈虧") or 0) * (_fx if h.get("幣別","USD")=="USD" else 1) for h in _holdings)
+    _pnl_sign = "+" if _net_pnl >= 0 else ""
+    metric_card("💹 持倉盈虧", fmt_by_mode(_net_pnl, "HK$"),
+                delta=f"↑ {_pnl_sign}{fmt_by_mode(abs(_net_pnl),'')}" if _net_pnl>=0 else f"↓ {fmt_by_mode(abs(_net_pnl),'')}",
+                delta_color="#00d4aa" if _net_pnl>=0 else "#E24B4A")
 st.markdown("---")
 
 # ==================== 側邊欄 ====================
