@@ -533,6 +533,7 @@ df_current_logs = pd.DataFrame(st.session_state.my_logs) if st.session_state.my_
 total_actual_income = 0.0
 total_actual_expense = 0.0
 actual_spent_map = {cat: 0.0 for cat in st.session_state.my_budget.keys()}
+_unparseable_count = 0
 
 # ── 本期範圍：可自訂結算日（例如每月23號重置）──
 if "budget_cycle_day" not in st.session_state:
@@ -564,12 +565,13 @@ if not df_current_logs.empty:
     df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
     df_current_logs["_日期_dt"] = pd.to_datetime(df_current_logs["日期"], format="%Y/%m/%d", errors="coerce")
     # 只取「本期結算日」至「今日」的記錄作為「本月收入/支出/預算」基礎
+    # 日期無法解析的記錄不計入本期（避免錯誤資料污染本期統計）
     _is_this_month = (
         df_current_logs["_日期_dt"].dt.date >= _this_month_start
     ) & (
         df_current_logs["_日期_dt"].dt.date <= _today
     )
-    df_this_month_logs = df_current_logs[_is_this_month | df_current_logs["_日期_dt"].isna()]
+    df_this_month_logs = df_current_logs[_is_this_month]
 
     is_income_mask = (df_this_month_logs["類型"] == "收入 📥") | (df_this_month_logs["分類"] == "收入")
     total_actual_income = float(df_this_month_logs[is_income_mask]["金額"].sum())
@@ -577,6 +579,9 @@ if not df_current_logs.empty:
     total_actual_expense = float(df_expenses_only["金額"].sum())
     for cat in actual_spent_map.keys():
         actual_spent_map[cat] = float(df_expenses_only[df_expenses_only["分類"] == cat]["金額"].sum())
+
+    # 偵測：有幾多筆記錄因日期格式錯誤而被排除在本期統計外
+    _unparseable_count = int(df_current_logs["_日期_dt"].isna().sum())
 
 
 expected_savings = total_actual_income - total_actual_expense
@@ -644,6 +649,8 @@ with mode_col1:
         if new_cycle_day != st.session_state.budget_cycle_day:
             st.session_state.budget_cycle_day = new_cycle_day
             st.rerun()
+    if _unparseable_count > 0:
+        st.caption(f"⚠️ 有 {_unparseable_count} 筆記帳記錄日期格式異常，未計入本期統計（不影響歷史總覽/年度分析）。")
 with mode_col2:
     if "display_mode" not in st.session_state:
         st.session_state.display_mode = "完整數字"
@@ -754,8 +761,10 @@ if page_choice == "📊 財務總覽 & 預算監控":
                 continue
             use_rate = (a_amount / b_amount * 100) if b_amount > 0 else 100.0
             use_rate_capped = min(use_rate, 100)
-            if use_rate >= 100:
+            if use_rate > 100:
                 bar_color = "#E24B4A"; status = "🔴 超支"
+            elif use_rate >= 100:
+                bar_color = "#3b82f6"; status = "✅ 已用完"
             elif use_rate >= 80:
                 bar_color = "#EF9F27"; status = "🟡 預警"
             else:
@@ -1482,6 +1491,7 @@ elif page_choice == "🔔 智能提醒中心":
     # ─── 預算超支警報 ───
     st.markdown("### 🚨 預算超支警報")
     alerts = []
+    used_up_list = []
     warnings_list = []
     ok_list = []
     for cat, budget_val in st.session_state.my_budget.items():
@@ -1490,8 +1500,10 @@ elif page_choice == "🔔 智能提醒中心":
             continue
         if budget_val > 0:
             rate = actual / budget_val * 100
-            if rate >= 100:
+            if rate > 100:
                 alerts.append((cat, actual, budget_val, rate))
+            elif rate >= 100:
+                used_up_list.append((cat, actual, budget_val, rate))
             elif rate >= 80:
                 warnings_list.append((cat, actual, budget_val, rate))
             else:
@@ -1514,6 +1526,17 @@ elif page_choice == "🔔 智能提醒中心":
             """, unsafe_allow_html=True)
     else:
         st.success("✅ 目前沒有超支項目")
+
+    if used_up_list:
+        for cat, actual, bgt, rate in used_up_list:
+            st.markdown(f"""
+            <div style="background:rgba(59,130,246,0.1);border:1px solid rgba(59,130,246,0.4);border-radius:10px;padding:10px 16px;margin-bottom:6px">
+            <div style="display:flex;justify-content:space-between">
+              <span style="font-weight:600;color:#3b82f6">✅ {cat}</span>
+              <span style="color:#3b82f6">預算已剛好用完（100%）</span>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
 
     if warnings_list:
         st.warning(f"🟡 **{len(warnings_list)}** 個項目即將達到預算上限")
