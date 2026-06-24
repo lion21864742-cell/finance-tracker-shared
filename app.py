@@ -2,7 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.express as px
 import plotly.graph_objects as go
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import firebase_admin
 from firebase_admin import credentials, firestore
 import requests
@@ -534,14 +534,36 @@ total_actual_income = 0.0
 total_actual_expense = 0.0
 actual_spent_map = {cat: 0.0 for cat in st.session_state.my_budget.keys()}
 
-# ── 本月範圍：每月1號自動重新開始計算 ──
+# ── 本期範圍：可自訂結算日（例如每月23號重置）──
+if "budget_cycle_day" not in st.session_state:
+    st.session_state.budget_cycle_day = 23  # 預設每月23號重置
+
+def get_current_cycle_range(cycle_day: int, today: date = None):
+    """計算本期（結算週期）的開始與結束日期。
+    例如 cycle_day=23：若今日 >= 23號，本期 = 本月23號 ~ 下月22號；
+                       若今日 < 23號，本期 = 上月23號 ~ 本月22號。
+    """
+    today = today or date.today()
+    cycle_day = max(1, min(cycle_day, 28))  # 限制在 1-28，避免月底日數不一致問題
+    if today.day >= cycle_day:
+        period_start = date(today.year, today.month, cycle_day)
+    else:
+        prev_month = today.month - 1 if today.month > 1 else 12
+        prev_year = today.year if today.month > 1 else today.year - 1
+        period_start = date(prev_year, prev_month, cycle_day)
+    # 結束日 = 開始日 + 1個月 - 1天
+    end_month = period_start.month + 1 if period_start.month < 12 else 1
+    end_year = period_start.year if period_start.month < 12 else period_start.year + 1
+    period_end = date(end_year, end_month, cycle_day) - timedelta(days=1)
+    return period_start, period_end
+
 _today = date.today()
-_this_month_start = date(_today.year, _today.month, 1)
+_this_month_start, _cycle_period_end = get_current_cycle_range(st.session_state.budget_cycle_day, _today)
 
 if not df_current_logs.empty:
     df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
     df_current_logs["_日期_dt"] = pd.to_datetime(df_current_logs["日期"], format="%Y/%m/%d", errors="coerce")
-    # 只取「本月1號」至「今日」的記錄作為「本月收入/支出/預算」基礎
+    # 只取「本期結算日」至「今日」的記錄作為「本月收入/支出/預算」基礎
     _is_this_month = (
         df_current_logs["_日期_dt"].dt.date >= _this_month_start
     ) & (
@@ -555,6 +577,7 @@ if not df_current_logs.empty:
     total_actual_expense = float(df_expenses_only["金額"].sum())
     for cat in actual_spent_map.keys():
         actual_spent_map[cat] = float(df_expenses_only[df_expenses_only["分類"] == cat]["金額"].sum())
+
 
 expected_savings = total_actual_income - total_actual_expense
 savings_rate = (expected_savings / total_actual_income * 100) if total_actual_income > 0 else 0.0
@@ -613,7 +636,14 @@ st.markdown("---")
 # ── 顯示模式切換 ──
 mode_col1, mode_col2 = st.columns([3, 1])
 with mode_col1:
-    st.caption(f"📅 「本月收入/支出/預算」統計範圍：**{_this_month_start.strftime('%Y/%m/%d')} ～ {_today.strftime('%Y/%m/%d')}**（每月1號自動重新開始）")
+    st.caption(f"📅 「本月收入/支出/預算」結算週期：**{_this_month_start.strftime('%Y/%m/%d')} ～ {_cycle_period_end.strftime('%Y/%m/%d')}**（每月{st.session_state.budget_cycle_day}號重置）")
+    with st.popover("⚙️ 設定結算日"):
+        new_cycle_day = st.number_input("每月第幾號重置預算週期？", min_value=1, max_value=28,
+                                         value=st.session_state.budget_cycle_day, step=1,
+                                         help="例如設為 23，則每月23號開始新一期，到下月22號結束。")
+        if new_cycle_day != st.session_state.budget_cycle_day:
+            st.session_state.budget_cycle_day = new_cycle_day
+            st.rerun()
 with mode_col2:
     if "display_mode" not in st.session_state:
         st.session_state.display_mode = "完整數字"
