@@ -534,11 +534,24 @@ total_actual_income = 0.0
 total_actual_expense = 0.0
 actual_spent_map = {cat: 0.0 for cat in st.session_state.my_budget.keys()}
 
+# ── 本月範圍：每月1號自動重新開始計算 ──
+_today = date.today()
+_this_month_start = date(_today.year, _today.month, 1)
+
 if not df_current_logs.empty:
     df_current_logs["金額"] = pd.to_numeric(df_current_logs["金額"], errors='coerce').fillna(0.0)
-    is_income_mask = (df_current_logs["類型"] == "收入 📥") | (df_current_logs["分類"] == "收入")
-    total_actual_income = float(df_current_logs[is_income_mask]["金額"].sum())
-    df_expenses_only = df_current_logs[~is_income_mask]
+    df_current_logs["_日期_dt"] = pd.to_datetime(df_current_logs["日期"], format="%Y/%m/%d", errors="coerce")
+    # 只取「本月1號」至「今日」的記錄作為「本月收入/支出/預算」基礎
+    _is_this_month = (
+        df_current_logs["_日期_dt"].dt.date >= _this_month_start
+    ) & (
+        df_current_logs["_日期_dt"].dt.date <= _today
+    )
+    df_this_month_logs = df_current_logs[_is_this_month | df_current_logs["_日期_dt"].isna()]
+
+    is_income_mask = (df_this_month_logs["類型"] == "收入 📥") | (df_this_month_logs["分類"] == "收入")
+    total_actual_income = float(df_this_month_logs[is_income_mask]["金額"].sum())
+    df_expenses_only = df_this_month_logs[~is_income_mask]
     total_actual_expense = float(df_expenses_only["金額"].sum())
     for cat in actual_spent_map.keys():
         actual_spent_map[cat] = float(df_expenses_only[df_expenses_only["分類"] == cat]["金額"].sum())
@@ -599,6 +612,8 @@ st.markdown("---")
 
 # ── 顯示模式切換 ──
 mode_col1, mode_col2 = st.columns([3, 1])
+with mode_col1:
+    st.caption(f"📅 「本月收入/支出/預算」統計範圍：**{_this_month_start.strftime('%Y/%m/%d')} ～ {_today.strftime('%Y/%m/%d')}**（每月1號自動重新開始）")
 with mode_col2:
     if "display_mode" not in st.session_state:
         st.session_state.display_mode = "完整數字"
