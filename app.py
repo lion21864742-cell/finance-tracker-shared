@@ -378,6 +378,7 @@ if st.session_state.uid is None:
             st.session_state.my_crypto = data.get("crypto_holdings", [])
             st.session_state.my_savings_goal = safe_float(data.get("savings_goal"), 0.0)
             st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
+            st.session_state.my_savings_goals = data.get("savings_goals", [])
 
 # ==================== 登入/註冊 ====================
 if st.session_state.uid is None:
@@ -410,6 +411,7 @@ if st.session_state.uid is None:
                     st.session_state.my_crypto = data.get("crypto_holdings", [])
                     st.session_state.my_savings_goal = safe_float(data.get("savings_goal"), 0.0)
                     st.session_state.my_savings_goal_name = data.get("savings_goal_name", "儲蓄目標")
+                    st.session_state.my_savings_goals = data.get("savings_goals", [])
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = login_email
                     st.success("✅ 登入成功！")
@@ -449,6 +451,7 @@ if st.session_state.uid is None:
                     st.session_state.my_crypto = []
                     st.session_state.my_savings_goal = 0.0
                     st.session_state.my_savings_goal_name = "儲蓄目標"
+                    st.session_state.my_savings_goals = []
                     st.query_params["uid"] = st.session_state.uid
                     st.query_params["em"] = signup_email
                     st.success("✅ 註冊成功！歡迎使用！")
@@ -475,6 +478,7 @@ def save_now():
         "crypto_holdings": st.session_state.get("my_crypto", []),
         "savings_goal": st.session_state.get("my_savings_goal", 0.0),
         "savings_goal_name": st.session_state.get("my_savings_goal_name", "儲蓄目標"),
+        "savings_goals": st.session_state.get("my_savings_goals", []),
     })
 
 # ==================== refresh_holdings（保留現價）====================
@@ -1449,42 +1453,128 @@ elif page_choice == "🔔 智能提醒中心":
     st.subheader("🔔 智能提醒中心")
     st.caption("預算超支警報 · 儲蓄目標追蹤 · 財務健康提示")
 
-    # ─── 儲蓄目標設定 ───
+    # ─── 多重儲蓄目標 ───
     st.markdown("### 🎯 儲蓄目標設定")
-    sg_col1, sg_col2, sg_col3 = st.columns([2,2,1])
-    with sg_col1:
-        new_goal_name = st.text_input("目標名稱", value=st.session_state.my_savings_goal_name, key="goal_name_input")
-    with sg_col2:
-        new_goal_amt = st.number_input("目標金額 (HK$)", value=safe_float(st.session_state.my_savings_goal),
-                                        min_value=0.0, step=1000.0, key="goal_amt_input")
-    with sg_col3:
-        st.markdown("<br>", unsafe_allow_html=True)
-        if st.button("💾 儲存目標", use_container_width=True):
-            st.session_state.my_savings_goal = new_goal_amt
-            st.session_state.my_savings_goal_name = new_goal_name.strip() or "儲蓄目標"
-            save_now()
-            st.success("✅ 目標已儲存！")
-            st.rerun()
+    st.caption("可同時追蹤多個獨立儲蓄目標，例如：Chanel、旅行基金、應急錢…")
 
-    goal = safe_float(st.session_state.my_savings_goal)
-    if goal > 0:
-        progress_pct = min(expected_savings / goal * 100, 100) if goal > 0 else 0
-        prog_clr = "#1D9E75" if progress_pct >= 80 else "#EF9F27" if progress_pct >= 40 else "#E24B4A"
-        st.markdown(f"""
-        <div style="margin:12px 0">
-        <div style="display:flex;justify-content:space-between;margin-bottom:6px">
-          <span style="font-weight:600">{st.session_state.my_savings_goal_name}</span>
-          <span style="color:{prog_clr};font-weight:700">{progress_pct:.1f}%</span>
-        </div>
-        <div style="background:#1a2a3a;border-radius:8px;height:14px;overflow:hidden">
-          <div style="width:{progress_pct}%;background:{prog_clr};height:100%;border-radius:8px;transition:width 0.5s"></div>
-        </div>
-        <div style="display:flex;justify-content:space-between;font-size:12px;color:#718096;margin-top:4px">
-          <span>已存 HK${expected_savings:,.0f}</span>
-          <span>目標 HK${goal:,.0f}</span>
-        </div>
-        </div>
-        """, unsafe_allow_html=True)
+    if "my_savings_goals" not in st.session_state:
+        # 自動遷移舊版單一目標資料
+        old_goal = safe_float(st.session_state.get("my_savings_goal", 0.0))
+        old_name = st.session_state.get("my_savings_goal_name", "儲蓄目標")
+        if old_goal > 0:
+            st.session_state.my_savings_goals = [{
+                "名稱": old_name, "目標金額": old_goal, "已存金額": 0.0
+            }]
+        else:
+            st.session_state.my_savings_goals = []
+
+    # ── 新增目標 ──
+    with st.form("add_savings_goal_form", clear_on_submit=True):
+        sg_col1, sg_col2, sg_col3 = st.columns([2, 2, 1])
+        with sg_col1:
+            new_goal_name = st.text_input("目標名稱", placeholder="例如：Chanel 手袋")
+        with sg_col2:
+            new_goal_amt = st.number_input("目標金額 (HK$)", min_value=0.0, step=1000.0)
+        with sg_col3:
+            st.markdown("<br>", unsafe_allow_html=True)
+            add_goal_submit = st.form_submit_button("➕ 新增目標", use_container_width=True)
+        if add_goal_submit:
+            if new_goal_name.strip() and new_goal_amt > 0:
+                st.session_state.my_savings_goals.append({
+                    "名稱": new_goal_name.strip(), "目標金額": new_goal_amt, "已存金額": 0.0
+                })
+                save_now()
+                st.success(f"✅ 已新增目標「{new_goal_name.strip()}」")
+                st.rerun()
+            else:
+                st.warning("⚠️ 請輸入目標名稱及大於0的金額")
+
+    st.markdown("---")
+
+    # ── 顯示各目標進度 + 編輯/存入/刪除 ──
+    if not st.session_state.my_savings_goals:
+        st.info("💡 尚未設定任何儲蓄目標，使用上方表單新增。")
+    else:
+        for idx, sg in enumerate(st.session_state.my_savings_goals):
+            g_name = sg.get("名稱", "儲蓄目標")
+            g_target = safe_float(sg.get("目標金額", 0))
+            g_saved = safe_float(sg.get("已存金額", 0))
+            progress_pct = min(g_saved / g_target * 100, 100) if g_target > 0 else 0
+            prog_clr = "#1D9E75" if progress_pct >= 80 else "#EF9F27" if progress_pct >= 40 else "#E24B4A"
+
+            st.markdown(f"""
+            <div style="margin:10px 0">
+            <div style="display:flex;justify-content:space-between;margin-bottom:6px">
+              <span style="font-weight:600">{g_name}</span>
+              <span style="color:{prog_clr};font-weight:700">{progress_pct:.1f}%</span>
+            </div>
+            <div style="background:#1a2a3a;border-radius:8px;height:14px;overflow:hidden">
+              <div style="width:{progress_pct}%;background:{prog_clr};height:100%;border-radius:8px;transition:width 0.5s"></div>
+            </div>
+            <div style="display:flex;justify-content:space-between;font-size:12px;color:#718096;margin-top:4px">
+              <span>已存 HK${g_saved:,.0f}</span>
+              <span>目標 HK${g_target:,.0f}</span>
+            </div>
+            </div>
+            """, unsafe_allow_html=True)
+
+            gb1, gb2, gb3, gb4 = st.columns([1.2, 1.2, 1, 1])
+            with gb1:
+                if st.button("💰 存入", key=f"contribute_goal_{idx}", use_container_width=True):
+                    st.session_state[f"contributing_goal_{idx}"] = True
+            with gb2:
+                if st.button("✏️ 編輯", key=f"edit_goal_{idx}", use_container_width=True):
+                    st.session_state[f"editing_goal_{idx}"] = True
+            with gb3:
+                if st.button("🗑️ 刪除", key=f"del_goal_{idx}", use_container_width=True):
+                    st.session_state.my_savings_goals.pop(idx)
+                    save_now()
+                    st.rerun()
+            with gb4:
+                if progress_pct >= 100:
+                    st.markdown("<div style='text-align:center;color:#1D9E75;font-weight:700;padding-top:6px'>🎉 達成！</div>", unsafe_allow_html=True)
+
+            # 存入金額表單
+            if st.session_state.get(f"contributing_goal_{idx}", False):
+                with st.form(key=f"contribute_form_{idx}"):
+                    cf1, cf2, cf3 = st.columns([2, 1, 1])
+                    add_amt = cf1.number_input("存入金額 (HK$)", min_value=0.0, step=100.0, key=f"add_amt_{idx}")
+                    confirm_add = cf2.form_submit_button("✅ 確認", use_container_width=True)
+                    cancel_add = cf3.form_submit_button("✕ 取消", use_container_width=True)
+                    if confirm_add:
+                        if add_amt > 0:
+                            st.session_state.my_savings_goals[idx]["已存金額"] = g_saved + add_amt
+                            save_now()
+                            st.session_state[f"contributing_goal_{idx}"] = False
+                            st.success(f"✅ 已為「{g_name}」存入 HK${add_amt:,.0f}")
+                            st.rerun()
+                        else:
+                            st.warning("⚠️ 請輸入大於0的金額")
+                    if cancel_add:
+                        st.session_state[f"contributing_goal_{idx}"] = False
+                        st.rerun()
+
+            # 編輯目標表單
+            if st.session_state.get(f"editing_goal_{idx}", False):
+                with st.form(key=f"edit_form_{idx}"):
+                    ef1, ef2, ef3, ef4, ef5 = st.columns([2, 1.5, 1.5, 1, 1])
+                    e_name = ef1.text_input("名稱", value=g_name, key=f"e_name_{idx}")
+                    e_target = ef2.number_input("目標金額", value=g_target, min_value=0.0, step=1000.0, key=f"e_target_{idx}")
+                    e_saved = ef3.number_input("已存金額", value=g_saved, min_value=0.0, step=100.0, key=f"e_saved_{idx}")
+                    confirm_edit = ef4.form_submit_button("✅", use_container_width=True)
+                    cancel_edit = ef5.form_submit_button("✕", use_container_width=True)
+                    if confirm_edit:
+                        st.session_state.my_savings_goals[idx] = {
+                            "名稱": e_name.strip() or g_name, "目標金額": e_target, "已存金額": e_saved
+                        }
+                        save_now()
+                        st.session_state[f"editing_goal_{idx}"] = False
+                        st.success("✅ 已更新")
+                        st.rerun()
+                    if cancel_edit:
+                        st.session_state[f"editing_goal_{idx}"] = False
+                        st.rerun()
+            st.markdown("---")
 
     st.markdown("---")
 
